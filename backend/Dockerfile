@@ -2,7 +2,7 @@
 # Multi-stage avoided for now: a single thin image keeps local dev fast and
 # the production image is rebuilt on every ECS deploy anyway.
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Prevent .pyc files and force unbuffered stdout so logs surface immediately
 # in `docker compose logs` and CloudWatch.
