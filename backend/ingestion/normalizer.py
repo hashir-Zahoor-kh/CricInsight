@@ -30,6 +30,7 @@ from typing import Any, Mapping, TypeVar
 
 from app.models.enums import MatchType, PlayerRole, TossDecision
 
+from .exceptions import SkipRecord
 from .schemas import (
     NormalizedBattingStats,
     NormalizedBowlingStats,
@@ -37,6 +38,19 @@ from .schemas import (
     NormalizedMatchResult,
     NormalizedPlayer,
 )
+
+# Pattern used to filter women's cricket out at the normalizer layer.
+# Project scope is men's cricket only — keeping it out at this layer
+# (rather than the seed script) means the rule holds regardless of
+# caller, including any future ad-hoc ingestion paths.
+_WOMEN_PATTERN = re.compile(r"\bwomen\b", re.IGNORECASE)
+
+
+def _looks_like_womens(value: Any) -> bool:
+    """True if `value` mentions a women's team/squad in any casing."""
+    if value is None:
+        return False
+    return bool(_WOMEN_PATTERN.search(str(value)))
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +87,12 @@ def _coerce_enum(value: Any, enum_cls: type[E]) -> E | None:
 
 # --------------------------------------------------------------- text
 
-# Matches a [TLA] or [TLAW] suffix CricAPI appends to team display names,
-# e.g. "Pakistan Women [PAKW]" or "Mumbai Indians [MI]".
-_BRACKET_SUFFIX = re.compile(r"\s*\[[A-Z]{2,5}\]\s*$")
+# Matches the team-code suffix CricAPI appends to team display names,
+# e.g. "Pakistan Women [PAKW]", "Mumbai Indians [MI]", "Pakistan A
+# [PAK-A]". Accepts letters, digits, and hyphens, length 2-8 — keeps
+# the pattern strict enough not to swallow legitimate bracketed text
+# elsewhere in the name.
+_BRACKET_SUFFIX = re.compile(r"\s*\[[A-Z0-9\-]{2,8}\]\s*$")
 _GENDER_SUFFIX = re.compile(r"\s+(?:Women|Men)\s*$", re.IGNORECASE)
 
 
@@ -102,6 +119,13 @@ def _clean_str(value: Any) -> str | None:
 _COUNTRY_ALIASES: dict[str, str] = {
     "pak": "Pakistan",
     "pakistan": "Pakistan",
+    # Pakistan A (development tour squad) and Pakistan Shaheens (B-team)
+    # collapse into the senior side. They share most personnel and
+    # tracking them separately would just fragment analytics for the
+    # comparison pages without adding insight.
+    "pakistan a": "Pakistan",
+    "pakistan shaheens": "Pakistan",
+    "pakistan b": "Pakistan",
     "ind": "India",
     "india": "India",
     "aus": "Australia",
@@ -265,6 +289,19 @@ def normalize_player(raw: Mapping[str, Any]) -> NormalizedPlayer:
     if not name:
         raise ValueError("player record has no usable name")
 
+    # Women's cricket is out of scope. CricAPI exposes the gender of a
+    # player through `country` / `nationality` / `currentTeam` (e.g.
+    # "Pakistan Women"). If any of those signals women's, skip.
+    for source_field in ("country", "nationality", "currentTeam", "team"):
+        if _looks_like_womens(raw.get(source_field)):
+            raise SkipRecord(
+                f"women's player filtered (source field {source_field!r}={raw[source_field]!r})"
+            )
+    if _looks_like_womens(name):
+        # Belt-and-braces: some records put "Women" in the player's
+        # display name itself (e.g. "Bismah Maroof (Women)").
+        raise SkipRecord(f"women's player filtered (name={name!r})")
+
     return NormalizedPlayer(
         external_id=_clean_str(raw.get("id")) or _clean_str(raw.get("playerId")),
         name=name,
@@ -301,6 +338,14 @@ def normalize_match(raw: Mapping[str, Any]) -> NormalizedMatch:
     should skip the record.
     """
     team1, team2 = _split_teams(raw)
+
+    # Women's cricket is out of scope (see SkipRecord docstring). The
+    # check runs against the *normalized* team names so it catches both
+    # "Pakistan Women [PAKW]" and "Pakistan women" alike.
+    if _looks_like_womens(team1) or _looks_like_womens(team2):
+        raise SkipRecord(
+            f"women's match filtered (teams={team1!r} vs {team2!r})"
+        )
 
     return NormalizedMatch(
         external_id=str(raw["id"]) if raw.get("id") is not None else None,

@@ -46,3 +46,21 @@ class NetworkError(CricAPIError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+class SkipRecord(Exception):
+    """Raised by the normalizer when a record falls outside project scope.
+
+    Currently used for women's cricket — those records are filtered at
+    the normalizer layer so the rule is enforced regardless of caller.
+    Callers (seed script, tests) catch it and increment a "skipped"
+    counter; nothing is inserted into the DB.
+
+    Deliberately NOT a subclass of CricAPIError — this isn't an error
+    condition, it's a normal control-flow signal for "this record is
+    out of scope, move on."
+    """
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)

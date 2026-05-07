@@ -1,0 +1,13 @@
+{
+  "_fixture_note": "Women's T20I — must be filtered at the normalizer layer (raises SkipRecord). Used to lock in the rule that women's cricket is excluded from CricInsight regardless of caller. The 'Women' marker appears with bracket suffixes that the team-splitter strips before the gender check, so the check runs against normalized team names.",
+  "id": "fixture-womens-t20i-2025",
+  "matchType": "t20i",
+  "venue": "Karachi",
+  "ground": "National Stadium",
+  "dateTimeGMT": "2025-04-12T11:00:00",
+  "teams": ["Pakistan Women [PAKW]", "South Africa Women [SAW]"],
+  "matchWinner": "Pakistan Women [PAKW]",
+  "tossWinner": "South Africa Women [SAW]",
+  "tossChoice": "bowl",
+  "status": "Pakistan Women won by 4 wickets"
+}

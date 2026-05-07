@@ -21,8 +21,10 @@ from pydantic import ValidationError
 
 from app.models.enums import MatchType, PlayerRole, TossDecision
 from ingestion import normalizer
+from ingestion.exceptions import SkipRecord
 from ingestion.normalizer import (
     _coerce_enum,
+    _looks_like_womens,
     _normalize_country,
     _normalize_team_name,
     _parse_datetime,
@@ -137,10 +139,30 @@ class TestCountryAliases:
         assert _normalize_team_name("Mumbai Indians [MI]") == "Mumbai Indians"
 
     def test_team_name_keeps_gender_distinction(self):
-        # We deliberately preserve "Pakistan Women" instead of collapsing
-        # to "Pakistan" — match-level analytics needs to tell women's
-        # and men's matches apart.
+        # The team-name function itself preserves "Pakistan Women" so it
+        # remains a useful tool in isolation; the actual filtering of
+        # women's matches happens earlier in normalize_match (which
+        # raises SkipRecord). Both layers can coexist — the function is
+        # safe in isolation, and the policy is enforced before the
+        # function is reached for women's matches.
         assert _normalize_team_name("Pakistan Women [PAKW]") == "Pakistan Women"
+
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            ("Pakistan A", "Pakistan"),
+            ("Pakistan Shaheens", "Pakistan"),
+            ("Pakistan A [PAK-A]", "Pakistan"),
+            ("Pakistan Shaheens [PAKS]", "Pakistan"),
+            ("Pakistan B", "Pakistan"),
+        ],
+    )
+    def test_pakistan_development_squads_collapse_to_pakistan(self, raw, expected):
+        # Pivot decision: Pakistan A / Shaheens collapse into the senior
+        # side rather than being tracked as distinct teams. The country
+        # alias map is the single source of truth for this.
+        assert _normalize_team_name(raw) == expected
+        assert _normalize_country(raw) == expected
 
 
 class TestDerivedFields:
@@ -360,6 +382,85 @@ def test_every_match_fixture_round_trips_through_pydantic(fixture):
 def test_player_fixture_round_trips_through_pydantic():
     p = normalize_player(_load("player_weird_encoding.json"))
     NormalizedPlayer.model_validate(p.model_dump())
+
+
+class TestWomensFilter:
+    """Women's cricket is excluded scope. The filter must run at the
+    normalizer layer so the rule is enforced regardless of caller —
+    seed script, ad-hoc scripts, future ingestion paths, all included."""
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            ("Pakistan Women", True),
+            ("Pakistan women", True),
+            ("PAKISTAN WOMEN", True),
+            ("South Africa Women [SAW]", True),
+            ("Pakistan", False),
+            ("New Zealand", False),
+            # `\bwomen\b` shouldn't match substrings like "womenswear"
+            ("Womenswear XI", False),
+            (None, False),
+            ("", False),
+        ],
+    )
+    def test_looks_like_womens_helper(self, value, expected):
+        assert _looks_like_womens(value) is expected
+
+    def test_normalize_match_raises_on_women_team1(self):
+        with pytest.raises(SkipRecord) as exc_info:
+            normalize_match_with_scorecard(_load("match_women_filtered.json"))
+        # Reason mentions which side triggered the filter — useful for
+        # the seed script's skip-counter logging.
+        assert "women" in str(exc_info.value).lower()
+
+    def test_normalize_match_raises_on_women_team2(self):
+        # Mirror case: women's team in slot 2.
+        raw = {
+            "id": "x",
+            "matchType": "T20I",
+            "dateTimeGMT": "2025-01-01T00:00:00",
+            "teams": ["England", "England Women"],
+        }
+        with pytest.raises(SkipRecord):
+            normalize_match_with_scorecard(raw)
+
+    def test_normalize_player_raises_on_women_country(self):
+        raw = {
+            "id": "p-1",
+            "name": "Sidra Ameen",
+            "country": "Pakistan Women",
+            "playingRole": "BATSMAN",
+        }
+        with pytest.raises(SkipRecord):
+            normalize_player(raw)
+
+    def test_normalize_player_raises_on_women_in_currentteam(self):
+        # Some CricAPI shapes put gender on currentTeam rather than country.
+        raw = {
+            "id": "p-1",
+            "name": "Marizanne Kapp",
+            "currentTeam": "South Africa Women",
+        }
+        with pytest.raises(SkipRecord):
+            normalize_player(raw)
+
+    def test_normalize_player_raises_on_women_in_name(self):
+        # Defensive: if the only signal is in the display name itself.
+        raw = {
+            "id": "p-1",
+            "name": "Bismah Maroof (Women)",
+            "country": "Pakistan",
+        }
+        with pytest.raises(SkipRecord):
+            normalize_player(raw)
+
+    def test_mens_records_pass_through_unaffected(self):
+        # Sanity: the filter doesn't false-positive on regular records.
+        result = normalize_match_with_scorecard(_load("match_clean_t20i.json"))
+        assert result.match.team1 == "Pakistan"
+        player = normalize_player(_load("player_weird_encoding.json"))
+        assert player.country == "Pakistan"
 
 
 def test_negative_runs_in_source_raises_validation_error():
