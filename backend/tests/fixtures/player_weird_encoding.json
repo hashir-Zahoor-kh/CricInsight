@@ -1,0 +1,10 @@
+{
+  "_fixture_note": "Player with messy name: leading/trailing whitespace, NFD-form decomposed combining marks (the diaeresis on 'i' is encoded as i + U+0308), an internal double-space, and an ICC code in the country field. Normalizer must NFKC-normalize, collapse whitespace, and resolve 'Pak' to 'Pakistan'.",
+  "id": "p-mohammad-rizwan",
+  "name": " Mohammad  Riz̈wan ",
+  "country": "Pak",
+  "battingStyle": "Right-hand bat",
+  "bowlingStyle": null,
+  "playingRole": "WICKETKEEPER",
+  "dateOfBirth": "1992-06-01"
+}

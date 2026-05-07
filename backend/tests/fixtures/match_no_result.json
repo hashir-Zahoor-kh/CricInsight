@@ -1,0 +1,15 @@
+{
+  "_fixture_note": "Match abandoned due to rain — no winner, no toss outcome (match called off before toss), empty scorecard. Normalizer must accept all the nulls without raising; only the required fields (id, matchType, date, team1, team2) are populated.",
+  "id": "fixture-no-result-2024",
+  "matchType": "ODI",
+  "venue": "Auckland",
+  "ground": "Eden Park",
+  "dateTimeGMT": "2024-01-22T02:00:00",
+  "t1": "Pakistan [PAK]",
+  "t2": "New Zealand [NZ]",
+  "matchWinner": null,
+  "tossWinner": null,
+  "tossChoice": null,
+  "status": "Match abandoned due to rain",
+  "scorecard": []
+}

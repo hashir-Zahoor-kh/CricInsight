@@ -1,0 +1,54 @@
+{
+  "_fixture_note": "ODI with full extras data on bowling cards. Two innings; bowlers report wides/no-balls credited as `extras`. Normalizer must populate `extras` (nullable elsewhere) and compute `economy_rate` for one bowler whose `eco` field is missing while preserving the source value for the other.",
+  "id": "fixture-extras-2023",
+  "matchType": "odi",
+  "venue": "Karachi",
+  "ground": "National Stadium",
+  "dateTimeGMT": "2023-04-26T09:00:00",
+  "teams": ["Pakistan", "New Zealand"],
+  "matchWinner": "Pakistan",
+  "tossWinner": "New Zealand",
+  "tossChoice": "bowl",
+  "status": "Pakistan won by 26 runs",
+  "scorecard": [
+    {
+      "inning": "Pakistan Innings 1",
+      "batting": [
+        {
+          "batsman": { "id": "p-fakhar-zaman", "name": "Fakhar Zaman" },
+          "r": 180,
+          "b": 144,
+          "4s": 19,
+          "6s": 4,
+          "sr": 125.0,
+          "dismissal-text": "c Henry b Boult",
+          "position": 1
+        }
+      ],
+      "bowling": []
+    },
+    {
+      "inning": "New Zealand Innings 1",
+      "batting": [],
+      "bowling": [
+        {
+          "bowler": { "id": "p-shaheen-afridi", "name": "Shaheen Afridi" },
+          "o": 10,
+          "m": 1,
+          "r": 50,
+          "w": 4,
+          "eco": 5.0,
+          "extras": 6
+        },
+        {
+          "bowler": { "id": "p-haris-rauf", "name": "Haris Rauf" },
+          "o": 8,
+          "m": 0,
+          "r": 56,
+          "w": 2,
+          "extras": 3
+        }
+      ]
+    }
+  ]
+}

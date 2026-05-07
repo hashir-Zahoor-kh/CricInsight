@@ -1,0 +1,50 @@
+{
+  "_fixture_note": "Older record (1995). Several batters report runs without balls_faced — common in pre-2000 CricAPI data. Strike rate field is also absent and CANNOT be derived (balls=null), so normalizer must keep both null without raising.",
+  "id": "fixture-old-test-1995",
+  "matchType": "test",
+  "venue": "Lahore",
+  "ground": "Gaddafi Stadium",
+  "dateTimeGMT": "1995-09-15T05:00:00",
+  "teams": ["Pakistan", "Sri Lanka"],
+  "matchWinner": "Pakistan",
+  "tossWinner": "Pakistan",
+  "tossChoice": "Bat",
+  "status": "Pakistan won by an innings and 40 runs",
+  "scorecard": [
+    {
+      "inning": "Pakistan Innings 1",
+      "batting": [
+        {
+          "batsman": { "id": "p-saeed-anwar", "name": "Saeed Anwar" },
+          "r": 87,
+          "4s": 12,
+          "6s": 0,
+          "dismissal-text": "c Mahanama b Vaas"
+        },
+        {
+          "batsman": { "id": "p-aamir-sohail", "name": "Aamir Sohail" },
+          "r": 41,
+          "b": 95,
+          "4s": 5,
+          "6s": 0,
+          "sr": 43.16,
+          "dismissal-text": "lbw b Vaas"
+        }
+      ],
+      "bowling": []
+    },
+    {
+      "inning": "Sri Lanka Innings 1",
+      "batting": [],
+      "bowling": [
+        {
+          "bowler": { "id": "p-wasim-akram", "name": "Wasim Akram" },
+          "o": 22.4,
+          "m": 7,
+          "r": 48,
+          "w": 5
+        }
+      ]
+    }
+  ]
+}

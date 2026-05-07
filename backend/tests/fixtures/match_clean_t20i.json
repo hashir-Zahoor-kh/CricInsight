@@ -1,0 +1,96 @@
+{
+  "_fixture_note": "Modern T20I with full data: lowercase matchType, full scorecard for both innings with batting + bowling, derivable strike rates and economies, populated dismissal-text. The happy-path baseline — every other fixture is a deviation from this shape.",
+  "id": "fixture-clean-t20i-2025",
+  "matchType": "t20i",
+  "venue": "Lahore",
+  "ground": "Gaddafi Stadium",
+  "dateTimeGMT": "2025-09-20T14:00:00",
+  "teams": ["Pakistan", "England"],
+  "matchWinner": "Pakistan",
+  "tossWinner": "England",
+  "tossChoice": "bowl",
+  "status": "Pakistan won by 7 wickets",
+  "scorecard": [
+    {
+      "inning": "England Innings 1",
+      "batting": [
+        {
+          "batsman": { "id": "p-jos-buttler", "name": "Jos Buttler" },
+          "r": 47,
+          "b": 33,
+          "4s": 5,
+          "6s": 2,
+          "sr": 142.42,
+          "dismissal-text": "c Rizwan b Shaheen",
+          "position": 1
+        },
+        {
+          "batsman": { "id": "p-harry-brook", "name": "Harry Brook" },
+          "r": 56,
+          "b": 38,
+          "4s": 6,
+          "6s": 2,
+          "sr": 147.36,
+          "dismissal-text": "b Naseem",
+          "position": 3
+        }
+      ],
+      "bowling": [
+        {
+          "bowler": { "id": "p-shaheen-afridi", "name": "Shaheen Afridi" },
+          "o": 4,
+          "m": 0,
+          "r": 28,
+          "w": 2,
+          "eco": 7.0,
+          "extras": 1
+        },
+        {
+          "bowler": { "id": "p-naseem-shah", "name": "Naseem Shah" },
+          "o": 4,
+          "m": 0,
+          "r": 32,
+          "w": 1,
+          "eco": 8.0,
+          "extras": 0
+        }
+      ]
+    },
+    {
+      "inning": "Pakistan Innings 1",
+      "batting": [
+        {
+          "batsman": { "id": "p-babar-azam", "name": "Babar Azam" },
+          "r": 68,
+          "b": 41,
+          "4s": 9,
+          "6s": 1,
+          "sr": 165.85,
+          "dismissal-text": "not out",
+          "position": 1
+        },
+        {
+          "batsman": { "id": "p-mohammad-rizwan", "name": "Mohammad Rizwan" },
+          "r": 52,
+          "b": 35,
+          "4s": 6,
+          "6s": 1,
+          "sr": 148.57,
+          "dismissal-text": "c Buttler b Wood",
+          "position": 2
+        }
+      ],
+      "bowling": [
+        {
+          "bowler": { "id": "p-mark-wood", "name": "Mark Wood" },
+          "o": 4,
+          "m": 0,
+          "r": 36,
+          "w": 1,
+          "eco": 9.0,
+          "extras": 2
+        }
+      ]
+    }
+  ]
+}
