@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, Index, String
+from sqlalchemy import Date, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
@@ -67,12 +67,10 @@ class Player(Base, TimestampMixin):
         passive_deletes=True,
     )
 
-    __table_args__ = (
-        # Speeds up `GET /players/search?name=babar` — the dashboard's first
-        # interaction and a common path. A plain BTREE on `name` is enough
-        # for prefix/equality queries; trigram indexes can come later.
-        Index("ix_players_name_lower", "name"),
-    )
+    # Note: the BTREE on `name` comes from `index=True` on the column above;
+    # that's enough for the dashboard's `GET /players/search?name=babar`
+    # equality/prefix lookups. A trigram index for fuzzier search can come
+    # later if needed.
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Player id={self.id} name={self.name!r} role={self.role}>"
