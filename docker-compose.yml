@@ -1,0 +1,79 @@
+# CricInsight local development stack.
+#
+# Usage:
+#   docker compose up db          # just the database (Phase 1.2 test path)
+#   docker compose up             # full stack once backend/dashboard are ready
+#   docker compose down -v        # tear down + wipe volume to reset state
+#
+# Note on env: each service reads from the project root .env via `env_file`,
+# but we also set DATABASE_URL inline on the backend to override the localhost
+# value from .env (the backend must reach the db container by service name).
+
+# Compose v2+ ignores the top-level `version:` field; omitting it silences the
+# deprecation warning while still working on every supported Docker version.
+
+services:
+  db:
+    image: postgres:15
+    container_name: cricinsight-db
+    environment:
+      POSTGRES_USER: cricinsight
+      POSTGRES_PASSWORD: cricinsight
+      POSTGRES_DB: cricinsight
+    ports:
+      # Exposed to the host so `psql -h localhost` and Alembic running outside
+      # the compose network can connect during development.
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Backend uses `depends_on.condition: service_healthy` so it waits until
+      # Postgres has accepted at least one connection — avoids the classic
+      # "connection refused on first boot" flake.
+      test: ["CMD-SHELL", "pg_isready -U cricinsight -d cricinsight"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: cricinsight-backend
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL from .env so the backend talks to the `db`
+      # service over the compose network instead of localhost.
+      DATABASE_URL: postgresql+asyncpg://cricinsight:cricinsight@db:5432/cricinsight
+      DATABASE_URL_SYNC: postgresql+psycopg2://cricinsight:cricinsight@db:5432/cricinsight
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Bind-mount source for hot-reload during dev. Production ECS image
+      # copies code in at build time and never mounts.
+      - ./backend:/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  dashboard:
+    build: ./dashboard
+    container_name: cricinsight-dashboard
+    environment:
+      # CRA reads REACT_APP_* at build time; we point at the host-exposed
+      # backend port so the browser can reach it directly.
+      REACT_APP_API_URL: http://localhost:8000/api/v1
+      CHOKIDAR_USEPOLLING: "true"  # reliable file-watch inside Docker on macOS
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./dashboard:/app
+      # Anonymous volume keeps node_modules inside the container so the host
+      # bind-mount doesn't shadow them with a (possibly empty) host directory.
+      - /app/node_modules
+
+volumes:
+  postgres_data:
