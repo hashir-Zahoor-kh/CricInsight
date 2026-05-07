@@ -35,7 +35,11 @@ from app.models import Base  # noqa: E402 — sys.path tweak required first
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(BACKEND_ROOT.parent / ".env")
+    # backend/.env first (where the user keeps it), repo-root .env fallback.
+    for _candidate in (BACKEND_ROOT / ".env", BACKEND_ROOT.parent / ".env"):
+        if _candidate.exists():
+            load_dotenv(_candidate)
+            break
 except ModuleNotFoundError:  # pragma: no cover
     pass
 
