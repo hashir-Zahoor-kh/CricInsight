@@ -166,18 +166,40 @@ class PlayerComparisonSlot(BaseModel):
 # The flagship comparison response
 # ====================================================================
 
+class DataQualityWarning(BaseModel):
+    """One non-fatal warning about thin or missing data.
+
+    The API returns 200 with a populated `data_quality` list rather
+    than 404 / misleading averages-from-2-innings. Dashboard renders
+    these as inline notices ("Insufficient data for Player X in T20I
+    — only 3 innings available") next to the affected panel rather
+    than failing the page.
+    """
+
+    code: str  # machine-readable: "insufficient_innings_player1_batting"
+    message: str
+    affected: str | None = None  # "player1" / "player2" / opponent name
+
+
 class ComparisonResponse(BaseModel):
     """Side-by-side comparison of two players in a chosen format.
 
     Format is REQUIRED on the request side — comparing a Test player's
     average to a T20I player's strike rate would be meaningless, so
     the API refuses to do it.
+
+    Below the minimum-innings threshold (5), the corresponding
+    `batting` or `bowling` block on each slot is still returned (with
+    raw counts) but a `data_quality` warning is appended so the
+    dashboard can render an "insufficient data" notice instead of a
+    chart computed from 2 innings.
     """
 
     format: MatchType
     player1: PlayerComparisonSlot
     player2: PlayerComparisonSlot
     common_opponents: list[CommonOpponentBlock] = Field(default_factory=list)
+    data_quality: list[DataQualityWarning] = Field(default_factory=list)
 
 
 # ====================================================================
@@ -195,11 +217,13 @@ class FormatBreakdown(BaseModel):
 class PlayerAverageResponse(BaseModel):
     profile: PlayerProfileCard
     by_format: list[FormatBreakdown]
+    data_quality: list[DataQualityWarning] = Field(default_factory=list)
 
 
 class FormGuideResponse(BaseModel):
     profile: PlayerProfileCard
     innings: list[FormGuideEntry] = Field(default_factory=list, max_length=10)
+    data_quality: list[DataQualityWarning] = Field(default_factory=list)
 
 
 # ====================================================================

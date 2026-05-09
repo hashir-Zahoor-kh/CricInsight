@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Generator
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -165,3 +166,50 @@ def db_session(test_engine: Engine) -> Generator[Session, None, None]:
     finally:
         session.rollback()
         session.close()
+
+
+# --- async fixtures (used by the FastAPI router tests) ---
+
+@pytest.fixture(scope="session")
+def async_test_engine_url(test_engine: Engine) -> str:
+    """Reuse the cricinsight_test DB but expose its URL in the
+    asyncpg form so async fixtures can connect to it.
+    """
+    return test_engine.url.render_as_string(hide_password=False).replace(
+        "postgresql+psycopg2", "postgresql+asyncpg"
+    )
+
+
+@pytest_asyncio.fixture
+async def async_db_session(async_test_engine_url: str):
+    """Async session for FastAPI router tests.
+
+    Built per-test (not per-session) so the engine's pool isn't
+    contended across the suite. TRUNCATEs the tables before yielding
+    so each test starts at zero rows.
+    """
+    from sqlalchemy.ext.asyncio import (
+        AsyncSession,
+        async_sessionmaker,
+        create_async_engine,
+    )
+
+    engine = create_async_engine(async_test_engine_url, future=True)
+    factory = async_sessionmaker(
+        bind=engine, expire_on_commit=False, class_=AsyncSession
+    )
+
+    async with factory() as session:
+        await session.execute(
+            text(
+                "TRUNCATE TABLE batting_stats, bowling_stats, matches, players "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
+        await session.commit()
+        try:
+            yield session
+        finally:
+            await session.rollback()
+
+    await engine.dispose()

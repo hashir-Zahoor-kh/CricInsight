@@ -11,6 +11,7 @@ from .analytics import (
     BowlingCareerStats,
     CommonOpponentBlock,
     ComparisonResponse,
+    DataQualityWarning,
     FormatBreakdown,
     FormGuideEntry,
     FormGuideResponse,
@@ -55,4 +56,5 @@ __all__ = [
     # analytics — flagship comparison endpoint
     "PlayerComparisonSlot",
     "ComparisonResponse",
+    "DataQualityWarning",
 ]
