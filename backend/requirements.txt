@@ -13,6 +13,10 @@ sqlalchemy==2.0.30
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
 alembic==1.13.1
+# greenlet is required by SQLAlchemy's asyncio extension. It's normally
+# pulled in transitively, but pinning explicitly avoids "you forgot
+# greenlet" failures on minor SQLAlchemy bumps.
+greenlet==3.0.3
 
 # --- Validation / config ---
 pydantic==2.7.1
