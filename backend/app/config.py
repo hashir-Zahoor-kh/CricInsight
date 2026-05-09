@@ -90,7 +90,15 @@ class Settings(BaseSettings):
     # it was launched. Listing both up front keeps the dashboard from
     # tripping into a CORS error after a routine `npm start`.
     cors_origins: str = Field(
-        default="http://localhost:3000,http://127.0.0.1:3000",
+        # 3000 is the project convention (vite.config.ts forces it +
+        # docker-compose maps it). 5173 is Vite's default in case
+        # someone runs `npm run dev` from a fresh checkout where
+        # strictPort:true falls back, or uses a slightly different
+        # config locally.
+        default=(
+            "http://localhost:3000,http://127.0.0.1:3000,"
+            "http://localhost:5173,http://127.0.0.1:5173"
+        ),
         description="Comma-separated list of origins allowed to call the API.",
     )
 
