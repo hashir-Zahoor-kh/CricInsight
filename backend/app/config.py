@@ -20,7 +20,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -85,14 +85,51 @@ class Settings(BaseSettings):
     aws_region: str = Field(default="us-east-1")
 
     # --- CORS — comma-separated origins ---
+    # Default includes both localhost AND 127.0.0.1 variants because
+    # CRA's dev server resolves to one or the other depending on how
+    # it was launched. Listing both up front keeps the dashboard from
+    # tripping into a CORS error after a routine `npm start`.
     cors_origins: str = Field(
-        default="http://localhost:3000",
+        default="http://localhost:3000,http://127.0.0.1:3000",
         description="Comma-separated list of origins allowed to call the API.",
     )
 
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    # ---- defensive URL rewriting ----
+    # Users sometimes drop a single `postgresql://...` URL in .env
+    # without picking the right driver. The FastAPI runtime needs
+    # asyncpg and Alembic needs psycopg2; auto-rewriting both fields
+    # to the right driver keeps things from blowing up at first
+    # request when someone forgets to differentiate.
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _force_async_driver(cls, v: str) -> str:
+        if not isinstance(v, str):
+            return v
+        if v.startswith("postgresql+asyncpg://"):
+            return v
+        if v.startswith("postgresql+psycopg2://"):
+            return v.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
+    @field_validator("database_url_sync", mode="before")
+    @classmethod
+    def _force_sync_driver(cls, v: str) -> str:
+        if not isinstance(v, str):
+            return v
+        if v.startswith("postgresql+psycopg2://"):
+            return v
+        if v.startswith("postgresql+asyncpg://"):
+            return v.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return v
 
     model_config = SettingsConfigDict(
         env_file=_env_file_path(),
