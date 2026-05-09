@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Force-light theme for now — the dashboard's PK green palette is
+   designed against white/off-white. A dark mode would need its own
+   token set (Phase 5.4 territory if/when we add it). */
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  min-height: 100vh;
+  background: theme("colors.pk.50");
+  color: theme("colors.ink.800");
+}
+
+/* Body font stack defers to the Tailwind theme.fontFamily.sans the
+   moment Inter loads. */
+body {
+  font-family: theme("fontFamily.sans");
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
