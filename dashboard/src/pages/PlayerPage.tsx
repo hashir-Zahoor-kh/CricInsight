@@ -5,7 +5,12 @@ import { ArrowLeft } from "lucide-react";
 import { DataQualityNotice } from "../components/DataQualityNotice";
 import { EmptyState } from "../components/EmptyState";
 import { FormSparkline } from "../components/FormSparkline";
-import { Skeleton } from "../components/LoadingSkeleton";
+import {
+  ProfileCardSkeleton,
+  Skeleton,
+  SparklineSkeleton,
+  StatTableSkeleton,
+} from "../components/LoadingSkeleton";
 import { PlayerProfileCard } from "../components/PlayerProfileCard";
 import {
   usePlayer,
@@ -34,10 +39,12 @@ export function PlayerPage() {
 
   if (playerQuery.isLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-1/3" />
-        <Skeleton className="h-44 w-full" />
-        <Skeleton className="h-32 w-full" />
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <ProfileCardSkeleton />
+        <Skeleton className="h-12" />
+        <StatTableSkeleton rows={4} />
+        <SparklineSkeleton />
       </div>
     );
   }
@@ -78,8 +85,9 @@ export function PlayerPage() {
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Home
         </Link>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink-900">
-          {player.name}
+          Player Profile
         </h1>
+        <p className="text-ink-600">{player.name}</p>
       </div>
 
       <PlayerProfileCard profile={profile} accent="primary" />
@@ -147,7 +155,7 @@ function ByFormatTable({
   breakdowns: { format: string; batting: any; bowling: any }[];
 }) {
   if (loading) {
-    return <Skeleton className="h-44" />;
+    return <StatTableSkeleton rows={4} />;
   }
   if (breakdowns.length === 0) {
     return (
@@ -223,7 +231,7 @@ function FormSection({
   entries: import("../api/types").FormGuideEntry[];
   profile: import("../api/types").PlayerProfileCard;
 }) {
-  if (loading) return <Skeleton className="h-44" />;
+  if (loading) return <SparklineSkeleton />;
   return (
     <FormSparkline
       entries={entries}

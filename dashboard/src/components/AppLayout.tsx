@@ -77,11 +77,16 @@ function NavItem({
     <NavLink
       to={to}
       end={end}
+      // Active state spec from the user contract:
+      //   bg-pk-800, white text, left border pk-400
+      // Inactive:
+      //   ink-300 text on pk-950 (sidebar bg) — sits low-contrast
+      //   so the active row visually pops without looking gaudy.
       className={({ isActive }) =>
-        `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+        `flex items-center gap-2 rounded-md border-l-2 px-3 py-2 text-sm transition-colors ${
           isActive
-            ? "bg-pk-900 text-white"
-            : "text-pk-200 hover:bg-pk-900/60 hover:text-white"
+            ? "border-pk-400 bg-pk-800 text-white"
+            : "border-transparent text-ink-300 hover:bg-pk-900/60 hover:text-white"
         }`
       }
     >

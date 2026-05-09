@@ -6,7 +6,12 @@ import { ComparisonRadar } from "../components/ComparisonRadar";
 import { DataQualityNotice } from "../components/DataQualityNotice";
 import { EmptyState } from "../components/EmptyState";
 import { FormSparkline } from "../components/FormSparkline";
-import { Skeleton } from "../components/LoadingSkeleton";
+import {
+  ProfileCardSkeleton,
+  RadarSkeleton,
+  SparklineSkeleton,
+  StatTableSkeleton,
+} from "../components/LoadingSkeleton";
 import { PlayerProfileCard } from "../components/PlayerProfileCard";
 import { CompareStatRow } from "../components/StatCard";
 import { useCompare, usePlayers } from "../hooks/useApi";
@@ -58,7 +63,7 @@ export function ComparisonPage() {
     <div className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-3xl font-semibold tracking-tight text-ink-900">
-          Player comparison
+          Player Comparison
         </h1>
         <p className="text-ink-600">
           Side-by-side career stats, form, and head-to-head insight.
@@ -246,13 +251,20 @@ function Body({
     );
   }
   if (loading) {
+    // Content-shaped skeletons — same dimensions and rough layout as
+    // the resolved view so when data lands there is zero reflow.
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
-          <Skeleton className="h-44" />
-          <Skeleton className="h-44" />
+          <ProfileCardSkeleton />
+          <ProfileCardSkeleton />
         </div>
-        <Skeleton className="h-96" />
+        <RadarSkeleton />
+        <StatTableSkeleton rows={7} />
+        <div className="grid grid-cols-2 gap-4">
+          <SparklineSkeleton />
+          <SparklineSkeleton />
+        </div>
       </div>
     );
   }

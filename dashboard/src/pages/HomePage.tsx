@@ -121,7 +121,7 @@ function Hero({
         </div>
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">
-            CricInsight
+            CricInsight — Cricket Analytics
           </h1>
           <p className="mt-1 max-w-lg text-pk-100">
             Side-by-side player comparison across formats. Pick two
