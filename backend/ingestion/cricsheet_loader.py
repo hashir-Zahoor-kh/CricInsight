@@ -526,27 +526,41 @@ def _team_membership_map(info: dict) -> dict[str, str]:
 
 def iter_filtered_matches(
     fmt: MatchType,
-    cfg: FilterConfig,
+    cfg: FilterConfig | None,
     *,
     data_dir: Path = DEFAULT_DATA_DIR,
     limit: int | None = None,
+    min_date: datetime | None = None,
+    progress_every: int | None = 100,
 ) -> Iterator[tuple[str, NormalizedMatchResult, dict[str, str]]]:
     """Yields (source_id, normalized_result, player_country_map) for
-    every cricsheet match of the given format that involves a seeded
-    player.
+    every cricsheet match of the given format.
+
+    Args:
+        cfg: Seeded-player filter. Pass `None` to disable filtering
+            (loads every men's match in the archive). Pass a
+            FilterConfig to restrict to matches involving at least
+            one seeded player — this is the default mode for the
+            comparison-focused 22-player seed.
+        limit: Cap total emissions per format. `None` means no cap —
+            walk the whole archive. Useful when the caller wants
+            "ALL T20Is from the last 5 years".
+        min_date: Optional date floor. Matches with `info.dates[0]`
+            earlier than this are skipped before the heavy
+            ball-by-ball parse. Pass a tz-aware datetime.
+        progress_every: Log a heartbeat every N yielded matches so
+            big loads (thousands of matches) don't appear hung.
 
     `player_country_map` is the per-match name/ext_id → team-name
     dict — passed through so the roster builder can backfill the
     `players.country` column without a second JSON pass.
-
-    `limit` caps total emissions per format — useful when targeting
-    "30 ODIs" without iterating thousands of files.
     """
     fmt_dir = ensure_archive(fmt, data_dir=data_dir)
 
     files = sorted(fmt_dir.glob("*.json"), reverse=True)  # newest-first
     yielded = 0
     skipped_unfiltered = 0
+    skipped_pre_date = 0
     skipped_womens_or_unparseable = 0
 
     for path in files:
@@ -559,12 +573,33 @@ def iter_filtered_matches(
 
         info = data.get("info") or {}
 
-        # Cheap pre-filter — drop women's matches and matches without
-        # any seeded player BEFORE doing the heavier ball-by-ball parse.
+        # Cheap pre-filters — apply BEFORE the heavy ball-by-ball
+        # parse so they cost a single dict lookup, not a few hundred
+        # thousand delivery iterations.
+
         if info.get("gender", "").lower() != "male":
             skipped_womens_or_unparseable += 1
             continue
-        if not match_involves_seeded_player(info, cfg):
+
+        # Date floor: skip anything older than min_date. Cheap because
+        # info.dates is already in the JSON head we just decoded.
+        if min_date is not None:
+            dates = info.get("dates") or []
+            if dates:
+                try:
+                    match_dt = datetime.strptime(dates[0], "%Y-%m-%d").replace(
+                        tzinfo=timezone.utc
+                    )
+                except ValueError:
+                    match_dt = None
+                if match_dt is not None and match_dt < min_date:
+                    skipped_pre_date += 1
+                    continue
+
+        # Seeded-player filter is optional. cfg=None means "load every
+        # match that survived the cheaper filters above" — used when
+        # the caller wants the entire 5-year window of T20Is/ODIs.
+        if cfg is not None and not match_involves_seeded_player(info, cfg):
             skipped_unfiltered += 1
             continue
 
@@ -581,12 +616,21 @@ def iter_filtered_matches(
         country_map = _team_membership_map(info)
         yield (path.stem, result, country_map)
         yielded += 1
+        if progress_every and yielded % progress_every == 0:
+            logger.info(
+                "%s: yielded %d matches so far (skipped %d pre-date, "
+                "%d unfiltered, %d unparseable/women)",
+                fmt.value, yielded, skipped_pre_date,
+                skipped_unfiltered, skipped_womens_or_unparseable,
+            )
         if limit is not None and yielded >= limit:
             break
 
     logger.info(
-        "%s: yielded %d matches (filtered out %d non-seeded, %d unparseable/skip)",
-        fmt.value, yielded, skipped_unfiltered, skipped_womens_or_unparseable,
+        "%s: yielded %d matches total "
+        "(skipped %d pre-date, %d non-seeded, %d unparseable/women)",
+        fmt.value, yielded, skipped_pre_date,
+        skipped_unfiltered, skipped_womens_or_unparseable,
     )
 
 

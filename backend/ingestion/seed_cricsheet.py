@@ -37,6 +37,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -94,12 +95,22 @@ SEEDED_PLAYER_NAMES: list[str] = [
     "Shakib Al Hasan",
 ]
 
-# Per-format targets the user specified.
-TARGETS: dict[MatchType, int] = {
-    MatchType.T20I: 50,
-    MatchType.ODI: 30,
-    MatchType.TEST: 20,
+# Default per-format caps. None means "no cap — load every match
+# that survives the (men's gender + optional date floor + optional
+# seeded-player) filters". Test defaults to 0 to match the project's
+# current scope: bulk-load is T20Is and ODIs only; Tests stay
+# off-by-default because the user explicitly excluded them in the
+# bulk-load pivot.
+TARGETS: dict[MatchType, int | None] = {
+    MatchType.T20I: None,
+    MatchType.ODI: None,
+    MatchType.TEST: 0,
 }
+
+# Default date floor: today minus 5 years. Honours the bulk-load
+# pivot ("ALL T20Is from the last 5 years"). The CLI can override
+# with --since YYYY-MM-DD.
+DEFAULT_LOOKBACK_YEARS = 5
 
 
 @dataclass
@@ -151,19 +162,38 @@ def _default_session_factory():
 
 def run_cricsheet_seed(
     *,
-    targets: dict[MatchType, int] | None = None,
+    targets: dict[MatchType, int | None] | None = None,
     seed_names: list[str] | None = None,
+    use_seed_filter: bool = True,
+    min_date: datetime | None = None,
     download: bool = True,
     wipe: bool = True,
     db_session_factory=None,
 ) -> CricsheetSeedReport:
-    """End-to-end: download → parse → filter → load."""
-    targets = targets or TARGETS
+    """End-to-end: download → parse → optional filter → load.
+
+    Args:
+        targets: Per-format cap. None values mean "load all".
+        use_seed_filter: When True (default), only load matches
+            involving at least one seeded player. When False
+            (the bulk-load mode), load every men's match that
+            survives the date filter — used for "ALL T20Is from
+            the last 5 years".
+        min_date: Date floor; matches earlier than this are
+            skipped before the heavy parse. None means no floor.
+    """
+    targets = targets if targets is not None else TARGETS
     seed_names = seed_names or SEEDED_PLAYER_NAMES
-    cfg = FilterConfig(seed_full_names=seed_names)
+    cfg: FilterConfig | None = (
+        FilterConfig(seed_full_names=seed_names) if use_seed_filter else None
+    )
 
     if download:
-        for fmt in targets:
+        # Only download archives we'll actually walk. A 0-cap format
+        # still has its directory ready for future runs.
+        for fmt, cap in targets.items():
+            if cap == 0:
+                continue
             ensure_archive(fmt)
 
     report = CricsheetSeedReport()
@@ -185,20 +215,29 @@ def run_cricsheet_seed(
         merged_country_map: dict[str, str] = {}
 
         for fmt, target in targets.items():
+            if target == 0:
+                logger.info("skipping %s (target=0)", fmt.value)
+                continue
             count = 0
             results_for_fmt: list[NormalizedMatchResult] = []
             for source_id, result, country_map in iter_filtered_matches(
-                fmt, cfg, limit=target
+                fmt, cfg, limit=target, min_date=min_date
             ):
                 results_for_fmt.append(result)
                 merged_country_map.update(country_map)
                 count += 1
 
-            counts = load_match_results(session, results_for_fmt)
-            report.db_counts = report.db_counts + counts
+            # Load in chunks instead of all-at-once to keep the
+            # transaction reasonable on bulk runs (thousands of
+            # matches × tens of stat rows = >100k inserts per fmt).
+            chunk_size = 200
+            for i in range(0, len(results_for_fmt), chunk_size):
+                chunk = results_for_fmt[i : i + chunk_size]
+                counts = load_match_results(session, chunk)
+                report.db_counts = report.db_counts + counts
+                session.commit()
             report.matches_loaded_per_format[fmt.value] = count
             loaded_results.extend(results_for_fmt)
-            session.commit()
             logger.info("loaded %d %s matches", count, fmt.value)
 
         # Promote seeded names to richer player profiles. Everyone else
@@ -240,20 +279,46 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--t20i",
         type=int,
-        default=TARGETS[MatchType.T20I],
-        help="Number of T20I matches to load.",
+        default=-1,  # -1 sentinel = "no cap, load all"
+        help="Cap on T20I matches loaded. -1 (default) means unlimited.",
     )
     parser.add_argument(
         "--odi",
         type=int,
-        default=TARGETS[MatchType.ODI],
-        help="Number of ODI matches to load.",
+        default=-1,
+        help="Cap on ODI matches loaded. -1 (default) means unlimited.",
     )
     parser.add_argument(
         "--test",
         type=int,
-        default=TARGETS[MatchType.TEST],
-        help="Number of Test matches to load.",
+        default=0,
+        help="Cap on Test matches loaded. 0 (default) skips Tests entirely.",
+    )
+    parser.add_argument(
+        "--seed-filter",
+        dest="seed_filter",
+        action="store_true",
+        help="Only load matches involving at least one seeded player.",
+    )
+    parser.add_argument(
+        "--no-seed-filter",
+        dest="seed_filter",
+        action="store_false",
+        help="Load every match that survives the gender + date filter "
+             "(default — bulk-load mode).",
+    )
+    parser.set_defaults(seed_filter=False)
+    parser.add_argument(
+        "--since",
+        type=str,
+        default=None,
+        help="Date floor as YYYY-MM-DD. Matches earlier than this are "
+             "skipped. Default: today minus 5 years.",
+    )
+    parser.add_argument(
+        "--no-date-filter",
+        action="store_true",
+        help="Disable the date floor entirely. Default is last 5 years.",
     )
     args = parser.parse_args(argv)
 
@@ -274,14 +339,41 @@ def main(argv: list[str] | None = None) -> int:
     except ModuleNotFoundError:
         pass
 
-    targets = {
-        MatchType.T20I: args.t20i,
-        MatchType.ODI: args.odi,
-        MatchType.TEST: args.test,
+    def _cap(v: int) -> int | None:
+        # -1 sentinel from the CLI → None ("no cap"). 0 means
+        # explicitly skip the format. Positive ints cap loaded count.
+        return None if v < 0 else v
+
+    targets: dict[MatchType, int | None] = {
+        MatchType.T20I: _cap(args.t20i),
+        MatchType.ODI: _cap(args.odi),
+        MatchType.TEST: _cap(args.test),
     }
+
+    if args.no_date_filter:
+        min_date = None
+    elif args.since:
+        min_date = datetime.strptime(args.since, "%Y-%m-%d").replace(
+            tzinfo=timezone.utc
+        )
+    else:
+        # 5 years ago in UTC. timedelta(days=...) avoids the leap-year
+        # subtleties of subtracting years directly.
+        min_date = datetime.now(timezone.utc) - timedelta(
+            days=DEFAULT_LOOKBACK_YEARS * 365 + 1
+        )
+
+    logger.info(
+        "seed mode: seed_filter=%s | since=%s | targets=%s",
+        args.seed_filter,
+        min_date.date().isoformat() if min_date else "no-floor",
+        {k.value: v if v is not None else "all" for k, v in targets.items()},
+    )
 
     report = run_cricsheet_seed(
         targets=targets,
+        use_seed_filter=args.seed_filter,
+        min_date=min_date,
         download=not args.no_download,
         wipe=not args.no_wipe,
     )
