@@ -41,7 +41,7 @@ from typing import Any
 from app.models.enums import MatchType
 from ingestion.client import (
     ENDPOINT_MATCH,
-    ENDPOINT_PLAYER_STATS,
+    ENDPOINT_MATCHES,
     ENDPOINT_PLAYERS,
     CricAPIClient,
 )
@@ -148,26 +148,43 @@ def _projected_uncached_calls(
     client: CricAPIClient,
     players: list[str],
     target_matches: int,
+    *,
+    matches_pages: int,
 ) -> int:
-    """Upper bound on uncached network calls.
+    """Upper bound on uncached network calls under the /matches-listing
+    discovery strategy (post-pivot from /playerStats — that endpoint
+    requires a paid CricAPI plan and gets 'Invalid API requested' on
+    the free tier).
 
-    For player searches and stats, we can check the cache directly
-    because the (endpoint, params) tuple is fully known up front. For
-    match details, the IDs come from /playerStats responses we
-    haven't fetched yet — so we just assume worst case (target_matches
-    uncached) and let RateLimitError stop us if reality is worse.
+    Three components:
+      1. /players?search=<name>           one per player, cache-checkable.
+      2. /matches?offset=<n>              one per page we plan to walk.
+      3. /match?id=<match_id>             one per match scorecard. IDs
+                                          aren't known yet so we assume
+                                          worst case = target_matches
+                                          uncached and let RateLimitError
+                                          stop us if reality is worse.
     """
     uncached = 0
     for name in players:
         if client.cache.get("GET", ENDPOINT_PLAYERS, {"search": name}) is None:
             uncached += 1
-    # Player stats lookups are keyed by external_id which we don't yet
-    # know, so assume worst case = one /playerStats per player.
-    uncached += len(players)
-    # And one /match per target match (best estimate; some may already
-    # be cached after a partial run).
+
+    # /matches pages — check each page's cache slot up front.
+    for page in range(matches_pages):
+        params = {} if page == 0 else {"offset": page * MATCHES_PAGE_SIZE}
+        if client.cache.get("GET", ENDPOINT_MATCHES, params) is None:
+            uncached += 1
+
     uncached += target_matches
     return uncached
+
+
+# CricAPI's free-tier /matches returns ~25 per page. We walk a few
+# pages so the candidate pool has enough rows per format to satisfy
+# the format-mix targets without burning quota on duplicates.
+MATCHES_PAGE_SIZE = 25
+DEFAULT_MATCHES_PAGES = 3
 
 
 # ----------------------------------------------------------- player phase
@@ -249,67 +266,99 @@ def resolve_players(
     return normalized, external_ids, women_skipped
 
 
-# ----------------------------------------------------------- stats phase
+# ------------------------------------------------------- discovery phase
 
-def _match_refs_from_stats(raw: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract per-match references from a /playerStats response.
+# This used to call /playerStats but that endpoint requires a paid
+# CricAPI plan ("Invalid API requested" on free tier). The free-tier
+# replacement is /matches which lists recent fixtures with their
+# matchType already populated — we filter and bucket here, then fetch
+# scorecards in the next phase.
 
-    CricAPI's player stats payload exposes match-level rows under
-    `data.matchList` (current shape) — we accept a few alternates so
-    schema drift doesn't take the seed offline.
-    """
-    data = raw.get("data") or {}
-    for key in ("matchList", "matches", "recentMatches"):
-        rows = data.get(key) if isinstance(data, dict) else None
-        if isinstance(rows, list):
-            return [r for r in rows if isinstance(r, dict)]
-    return []
+def _coerce_match_type(raw: Any) -> MatchType | None:
+    """Case-insensitive matchType string → MatchType enum, or None."""
+    if not isinstance(raw, str):
+        return None
+    raw_cf = raw.strip().casefold()
+    for member in MatchType:
+        if member.value.casefold() == raw_cf:
+            return member
+    return None
 
 
-def collect_match_pool(
+def _looks_like_womens_listing_row(row: dict[str, Any]) -> bool:
+    """Cheap pre-filter: drop women's matches at the listing stage so
+    we don't burn a /match call on a record we'd reject anyway."""
+    teams = row.get("teams") if isinstance(row.get("teams"), list) else []
+    candidates = list(teams) + [row.get("t1"), row.get("t2"), row.get("name")]
+    for c in candidates:
+        if isinstance(c, str) and "women" in c.lower():
+            return True
+    return False
+
+
+def discover_matches_via_listing(
     client: CricAPIClient,
-    player_external_ids: list[str],
     *,
+    max_pages: int = DEFAULT_MATCHES_PAGES,
+    page_size: int = MATCHES_PAGE_SIZE,
     force_refresh: bool = False,
 ) -> tuple[list[tuple[str, MatchType | None]], int]:
-    """For each player, fetch stats and accumulate (match_id, match_type)
-    candidates. Deduplicates by match_id. Returns (pool, calls_used)."""
-    seen: dict[str, MatchType | None] = {}
-    calls_started = client.quota.used()
+    """Walk /matches pages to build a (match_id, match_type) candidate
+    pool. Filters women's rows at the listing stage so we don't burn
+    a /match call only to skip the record at the normalizer.
 
-    for ext_id in player_external_ids:
+    Returns (pool, pages_fetched). The pool is deduped by match_id;
+    pages_fetched is just diagnostic so the caller can log it.
+    """
+    seen: dict[str, MatchType | None] = {}
+    pages_fetched = 0
+    skipped_womens = 0
+
+    for page in range(max_pages):
+        offset = page * page_size
         try:
-            raw = client.player_stats(ext_id, force_refresh=force_refresh)
+            raw = client.matches(offset=offset, force_refresh=force_refresh)
         except RateLimitError:
             raise
         except APIError as exc:
-            logger.warning("playerStats for %s failed: %s — skipping", ext_id, exc)
-            continue
+            logger.warning(
+                "/matches offset=%d failed: %s — stopping pagination",
+                offset, exc,
+            )
+            break
 
-        for ref in _match_refs_from_stats(raw):
-            match_id = ref.get("matchId") or ref.get("id")
+        pages_fetched += 1
+        rows = raw.get("data") if isinstance(raw, dict) else None
+        if not isinstance(rows, list) or len(rows) == 0:
+            logger.info("no rows on /matches page %d — stopping", page)
+            break
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            match_id = row.get("id") or row.get("matchId")
             if not match_id:
                 continue
-            # Best-effort match-type guess from the stats summary so we
-            # can sort by format quota without a /match call. Falls
-            # back to None which gets resolved later.
-            mt_raw = ref.get("matchType") or ref.get("format")
-            mt = None
-            if isinstance(mt_raw, str):
-                mt_cf = mt_raw.strip().casefold()
-                for member in MatchType:
-                    if member.value.casefold() == mt_cf:
-                        mt = member
-                        break
+            if _looks_like_womens_listing_row(row):
+                skipped_womens += 1
+                continue
+            mt = _coerce_match_type(
+                row.get("matchType") or row.get("match_type")
+            )
             seen[str(match_id)] = mt
 
-    calls_used = client.quota.used() - calls_started
-    pool = list(seen.items())
+        # Bail out early if CricAPI signals we're at the last page.
+        info = raw.get("info") if isinstance(raw, dict) else None
+        if isinstance(info, dict) and info.get("lastPage"):
+            logger.info("CricAPI reports lastPage=true — stopping")
+            break
+
     logger.info(
-        "collected %d unique match candidates across %d players (%d calls)",
-        len(pool), len(player_external_ids), calls_used,
+        "/matches discovery: %d unique candidates from %d page(s), "
+        "%d women's rows pre-filtered",
+        len(seen), pages_fetched, skipped_womens,
     )
-    return pool, calls_used
+    return list(seen.items()), pages_fetched
 
 
 # ----------------------------------------------------------- match phase
@@ -418,7 +467,10 @@ def run_seed(
         # ----- pre-flight -----
         report.quota_remaining_at_start = client.quota.remaining()
         report.worst_case_calls = _projected_uncached_calls(
-            client, PLAYER_SEED_LIST, target_matches
+            client,
+            PLAYER_SEED_LIST,
+            target_matches,
+            matches_pages=DEFAULT_MATCHES_PAGES,
         )
 
         logger.info(
@@ -457,13 +509,17 @@ def run_seed(
         report.players_resolved = len(players)
         report.players_skipped_women = women_skipped
 
-        # ----- stats phase -----
+        # ----- discovery phase (replaced /playerStats with /matches) -----
+        # /playerStats requires a paid CricAPI plan — use the free-tier
+        # /matches listing endpoint to discover candidate match IDs
+        # instead. The listing already includes matchType so we can
+        # bucket by format without a /match call per candidate.
         try:
-            pool, _ = collect_match_pool(
-                client, ext_ids, force_refresh=force_refresh
+            pool, _ = discover_matches_via_listing(
+                client, force_refresh=force_refresh
             )
         except RateLimitError:
-            logger.warning("rate limit hit during stats phase — stopping")
+            logger.warning("rate limit hit during /matches discovery — stopping")
             report.rate_limit_hit = True
             return _finalise(client, report, db_session_factory, [], players)
 

@@ -215,8 +215,17 @@ class CricAPIClient:
     def series(self, *, force_refresh: bool = False) -> dict[str, Any]:
         return self._get(ENDPOINT_SERIES, force_refresh=force_refresh)
 
-    def matches(self, *, force_refresh: bool = False) -> dict[str, Any]:
-        return self._get(ENDPOINT_MATCHES, force_refresh=force_refresh)
+    def matches(
+        self, *, offset: int = 0, force_refresh: bool = False
+    ) -> dict[str, Any]:
+        # Only include offset in params when > 0 so the offset=0 cache
+        # key matches the original (paramless) /matches calls and stays
+        # warm across this refactor. CricAPI paginates ~25/page on free
+        # tier; the seed walks 3-5 pages to build a candidate pool.
+        params = {} if offset == 0 else {"offset": offset}
+        return self._get(
+            ENDPOINT_MATCHES, params=params, force_refresh=force_refresh
+        )
 
     def match(self, match_id: str, *, force_refresh: bool = False) -> dict[str, Any]:
         return self._get(

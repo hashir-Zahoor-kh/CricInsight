@@ -54,6 +54,9 @@ Thumbs.db
 # Ingestion cache (raw CricAPI responses cached during dev)
 backend/ingestion/.cache/
 
+# Cricsheet downloads — large archives + extracted JSONs, not source code
+backend/ingestion/cricsheet_data/
+
 # Logs
 *.log
 logs/
