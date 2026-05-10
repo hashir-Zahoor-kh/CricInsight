@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/LoadingSkeleton";
-import { useHealth, usePlayers, useRecentMatches } from "../hooks/useApi";
+import { PlayerSearchPicker } from "../components/PlayerSearchPicker";
+import { useHealth, useMatches, useRecentMatches } from "../hooks/useApi";
 import { MatchType } from "../api/types";
 
 /**
@@ -15,16 +16,19 @@ import { MatchType } from "../api/types";
  */
 export function HomePage() {
   const navigate = useNavigate();
-  const playersQuery = usePlayers({ limit: 100 });
   const matchesQuery = useRecentMatches(8);
+  // Fetch a tall page of matches (200 max per backend cap) to feed
+  // the "loaded matches" KPI in the hero. Cheaper than a separate
+  // count endpoint for now, and React Query caches it.
+  const matchPoolQuery = useMatches({ limit: 200 });
   const health = useHealth();
 
   const [p1, setP1] = useState<number | null>(null);
   const [p2, setP2] = useState<number | null>(null);
   const [fmt, setFmt] = useState<MatchType>(MatchType.T20I);
 
-  const players = playersQuery.data ?? [];
-  const empty = !playersQuery.isLoading && players.length === 0;
+  const empty =
+    !matchPoolQuery.isLoading && (matchPoolQuery.data?.length ?? 0) === 0;
 
   const canCompare = p1 != null && p2 != null && p1 !== p2;
 
@@ -36,8 +40,9 @@ export function HomePage() {
   return (
     <div className="space-y-8">
       <Hero
-        playerCount={players.length}
-        matchCount={matchesQuery.data?.length ?? 0}
+        // matchPoolQuery caps at 200 per page; show an approximate
+        // count rather than the page size when the result is full.
+        matchCount={matchPoolQuery.data?.length ?? 0}
         apiHealthy={health.data?.status === "ok"}
       />
 
@@ -60,21 +65,17 @@ export function HomePage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <PlayerPicker
+              <PlayerSearchPicker
                 label="Player 1"
                 value={p1}
                 onChange={setP1}
-                players={players}
                 excludeId={p2}
-                loading={playersQuery.isLoading}
               />
-              <PlayerPicker
+              <PlayerSearchPicker
                 label="Player 2"
                 value={p2}
                 onChange={setP2}
-                players={players}
                 excludeId={p1}
-                loading={playersQuery.isLoading}
               />
             </div>
 
@@ -105,11 +106,9 @@ export function HomePage() {
 // --------------------------------------------------------------------
 
 function Hero({
-  playerCount,
   matchCount,
   apiHealthy,
 }: {
-  playerCount: number;
   matchCount: number;
   apiHealthy: boolean;
 }) {
@@ -132,8 +131,11 @@ function Hero({
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-3 text-sm">
-        <KpiBadge label="Players" value={playerCount.toString()} />
-        <KpiBadge label="Recent matches" value={matchCount.toString()} />
+        <KpiBadge label="Coverage" value="T20I + ODI" />
+        <KpiBadge
+          label="Matches loaded"
+          value={matchCount >= 200 ? "200+" : matchCount.toString()}
+        />
         <KpiBadge label="API" value={apiHealthy ? "Healthy" : "Degraded"} />
       </div>
     </div>
@@ -149,48 +151,6 @@ function KpiBadge({ label, value }: { label: string; value: string }) {
       <div className="mt-0.5 text-xl font-semibold tabular-nums text-white">
         {value}
       </div>
-    </div>
-  );
-}
-
-function PlayerPicker({
-  label,
-  value,
-  onChange,
-  players,
-  excludeId,
-  loading,
-}: {
-  label: string;
-  value: number | null;
-  onChange: (id: number | null) => void;
-  players: { id: number; name: string; country: string | null }[];
-  excludeId: number | null;
-  loading: boolean;
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-medium uppercase tracking-wider text-ink-500">
-        {label}
-      </label>
-      <select
-        className="mt-1 w-full rounded-md border border-ink-200 bg-white px-3 py-2 text-sm text-ink-800 focus:border-pk-600 focus:outline-none focus:ring-1 focus:ring-pk-600"
-        value={value ?? ""}
-        onChange={(e) =>
-          onChange(e.target.value === "" ? null : Number(e.target.value))
-        }
-        disabled={loading}
-      >
-        <option value="">{loading ? "loading…" : "Select a player"}</option>
-        {players
-          .filter((p) => p.id !== excludeId)
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.country ? ` · ${p.country}` : ""}
-            </option>
-          ))}
-      </select>
     </div>
   );
 }

@@ -4,7 +4,6 @@ import { useSearchParams } from "react-router-dom";
 
 import { ComparisonRadar } from "../components/ComparisonRadar";
 import { DataQualityNotice } from "../components/DataQualityNotice";
-import { EmptyState } from "../components/EmptyState";
 import { FormSparkline } from "../components/FormSparkline";
 import {
   ProfileCardSkeleton,
@@ -13,8 +12,9 @@ import {
   StatTableSkeleton,
 } from "../components/LoadingSkeleton";
 import { PlayerProfileCard } from "../components/PlayerProfileCard";
+import { PlayerSearchPicker } from "../components/PlayerSearchPicker";
 import { CompareStatRow } from "../components/StatCard";
-import { useCompare, usePlayers } from "../hooks/useApi";
+import { useCompare } from "../hooks/useApi";
 import { MatchType, type PlayerComparisonSlot } from "../api/types";
 
 /**
@@ -38,7 +38,6 @@ export function ComparisonPage() {
   const player2Id = parseIntOrNull(params.get("p2"));
   const formatParam = (params.get("fmt") as MatchType | null) ?? null;
 
-  const playersQuery = usePlayers({ limit: 100 });
   const compareQuery = useCompare(player1Id, player2Id, formatParam);
 
   // Default the format the first time the page mounts so the user
@@ -71,8 +70,6 @@ export function ComparisonPage() {
       </header>
 
       <PickersRow
-        playersLoading={playersQuery.isLoading}
-        players={playersQuery.data ?? []}
         player1Id={player1Id}
         player2Id={player2Id}
         format={formatParam}
@@ -82,14 +79,11 @@ export function ComparisonPage() {
       />
 
       <Body
-        playersEmpty={
-          !playersQuery.isLoading && (playersQuery.data?.length ?? 0) === 0
-        }
+        // playersEmpty no longer needed — the search picker shows
+        // its own "no players match" message inside the dropdown.
         loading={compareQuery.isLoading || compareQuery.isFetching}
         error={compareQuery.error}
         data={compareQuery.data}
-        // The picker UX leans on the "both players + format selected"
-        // gate to know whether to show the empty hint.
         hasSelection={
           player1Id != null && player2Id != null && formatParam != null
         }
@@ -101,8 +95,6 @@ export function ComparisonPage() {
 // --------------------------------------------------------------------
 
 function PickersRow({
-  playersLoading,
-  players,
   player1Id,
   player2Id,
   format,
@@ -110,8 +102,6 @@ function PickersRow({
   onPlayer2Change,
   onFormatChange,
 }: {
-  playersLoading: boolean;
-  players: { id: number; name: string; country: string | null }[];
   player1Id: number | null;
   player2Id: number | null;
   format: MatchType | null;
@@ -120,69 +110,23 @@ function PickersRow({
   onFormatChange: (fmt: MatchType) => void;
 }) {
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr_1fr] gap-3 rounded-2xl bg-white p-4 shadow-card">
-      <PlayerSelect
+    <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
+      <PlayerSearchPicker
         label="Player 1"
         value={player1Id}
         onChange={onPlayer1Change}
-        players={players}
-        loading={playersLoading}
         excludeId={player2Id}
       />
-      <div className="flex items-center justify-center">
+      <div className="pb-2 flex items-center justify-center">
         <ArrowRightLeft className="h-5 w-5 text-pk-700" aria-hidden />
       </div>
-      <PlayerSelect
+      <PlayerSearchPicker
         label="Player 2"
         value={player2Id}
         onChange={onPlayer2Change}
-        players={players}
-        loading={playersLoading}
         excludeId={player1Id}
       />
       <FormatSelect value={format} onChange={onFormatChange} />
-    </div>
-  );
-}
-
-function PlayerSelect({
-  label,
-  value,
-  onChange,
-  players,
-  loading,
-  excludeId,
-}: {
-  label: string;
-  value: number | null;
-  onChange: (id: number | null) => void;
-  players: { id: number; name: string; country: string | null }[];
-  loading: boolean;
-  excludeId: number | null;
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-medium uppercase tracking-wider text-ink-500">
-        {label}
-      </label>
-      <select
-        className="mt-1 w-full rounded-md border border-ink-200 bg-white px-3 py-2 text-sm text-ink-800 focus:border-pk-600 focus:outline-none focus:ring-1 focus:ring-pk-600"
-        value={value ?? ""}
-        onChange={(e) =>
-          onChange(e.target.value === "" ? null : Number(e.target.value))
-        }
-        disabled={loading}
-      >
-        <option value="">{loading ? "loading…" : "Select a player"}</option>
-        {players
-          .filter((p) => p.id !== excludeId)
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.country ? ` · ${p.country}` : ""}
-            </option>
-          ))}
-      </select>
     </div>
   );
 }
@@ -216,26 +160,16 @@ function FormatSelect({
 // --------------------------------------------------------------------
 
 function Body({
-  playersEmpty,
   loading,
   error,
   data,
   hasSelection,
 }: {
-  playersEmpty: boolean;
   loading: boolean;
   error: unknown;
   data: ReturnType<typeof useCompare>["data"];
   hasSelection: boolean;
 }) {
-  if (playersEmpty) {
-    return (
-      <EmptyState
-        title="No players in the database yet"
-        icon={<Users className="h-6 w-6 text-pk-700" aria-hidden />}
-      />
-    );
-  }
   if (!hasSelection) {
     return (
       <div className="rounded-2xl bg-white p-10 text-center shadow-card">
