@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
 
 import { ComparisonRadar } from "../components/ComparisonRadar";
 import { DataQualityNotice } from "../components/DataQualityNotice";
@@ -43,8 +44,6 @@ export function ComparisonPage() {
 
   const compareQuery = useCompare(player1Id, player2Id, formatParam);
 
-  // Default the format the first time the page mounts so the user
-  // doesn't have to pick T20I before any chart renders.
   useEffect(() => {
     if (formatParam == null) {
       const next = new URLSearchParams(params);
@@ -221,8 +220,13 @@ function Body({
 }
 
 // ====================================================================
-// Bento Grid
+// Bento Grid — staggered entrance animations per row
 // ====================================================================
+
+const SLIDE_UP = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0 },
+} as const;
 
 function BentoGrid({ data }: { data: ComparisonResponse }) {
   const radarMode = decideRadarMode(data.player1, data.player2);
@@ -230,29 +234,53 @@ function BentoGrid({ data }: { data: ComparisonResponse }) {
     <div className="space-y-6">
       <DataQualityNotice warnings={data.data_quality} />
 
-      {/* ----------------------------- Row 1 — player headers */}
-      <div className="grid grid-cols-2 gap-6">
+      {/* Row 1 — player headers */}
+      <motion.div
+        className="grid grid-cols-2 gap-6"
+        variants={SLIDE_UP}
+        initial="hidden"
+        animate="visible"
+        transition={{ duration: 0.4, delay: 0, ease: "easeOut" }}
+      >
         <PlayerProfileCard profile={data.player1.profile} />
         <PlayerProfileCard profile={data.player2.profile} />
-      </div>
+      </motion.div>
 
-      {/* ----------------------------- Row 2 — stat / radar / stat */}
-      <div className="grid grid-cols-[1fr_3fr_1fr] gap-6">
+      {/* Row 2 — stat / radar / stat */}
+      <motion.div
+        className="grid grid-cols-[1fr_3fr_1fr] gap-6"
+        variants={SLIDE_UP}
+        initial="hidden"
+        animate="visible"
+        transition={{ duration: 0.4, delay: 0.05, ease: "easeOut" }}
+      >
         <KeyStatCard slot={data.player1} mode={radarMode} />
         {radarMode != null ? (
-          <ComparisonRadar
-            player1={data.player1}
-            player2={data.player2}
-            mode={radarMode}
-          />
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
+          >
+            <ComparisonRadar
+              player1={data.player1}
+              player2={data.player2}
+              mode={radarMode}
+            />
+          </motion.div>
         ) : (
           <MixedRoleNotice />
         )}
         <KeyStatCard slot={data.player2} mode={radarMode} />
-      </div>
+      </motion.div>
 
-      {/* ----------------------------- Row 3 — form sparklines */}
-      <div className="grid grid-cols-2 gap-6">
+      {/* Row 3 — form sparklines */}
+      <motion.div
+        className="grid grid-cols-2 gap-6"
+        variants={SLIDE_UP}
+        initial="hidden"
+        animate="visible"
+        transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
+      >
         <FormSparkline
           entries={data.player1.form_guide}
           profile={data.player1.profile}
@@ -265,10 +293,17 @@ function BentoGrid({ data }: { data: ComparisonResponse }) {
           accentColor="#004225"
           delay={0.3}
         />
-      </div>
+      </motion.div>
 
-      {/* ----------------------------- Row 4 — common opponents */}
-      <CommonOpponentsTable data={data} />
+      {/* Row 4 — common opponents */}
+      <motion.div
+        variants={SLIDE_UP}
+        initial="hidden"
+        animate="visible"
+        transition={{ duration: 0.4, delay: 0.15, ease: "easeOut" }}
+      >
+        <CommonOpponentsTable data={data} />
+      </motion.div>
     </div>
   );
 }
@@ -295,6 +330,32 @@ function BentoSkeleton() {
 }
 
 // ====================================================================
+// useCountUp — animates a number from 0 to target over `duration`s
+// ====================================================================
+
+function useCountUp(target: number, duration = 0.8): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const start = performance.now();
+    let raf: number;
+
+    const step = (now: number) => {
+      const elapsed = (now - start) / 1000;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - (1 - progress) ** 2; // easeOut quadratic
+      setCount(progress < 1 ? target * eased : target);
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+
+  return count;
+}
+
+// ====================================================================
 // Row 2 — narrow key-stat card (the single neon-lime number per slot)
 // ====================================================================
 
@@ -305,10 +366,6 @@ function KeyStatCard({
   slot: PlayerComparisonSlot;
   mode: "batting" | "bowling" | null;
 }) {
-  // Pick the headline number consistent with the radar mode. When
-  // roles are mixed (radar disabled) fall back to whichever side the
-  // player actually has data for; that keeps the card meaningful even
-  // when the centrepiece chart can't render.
   const effective: "batting" | "bowling" =
     mode ??
     (slot.batting != null
@@ -317,23 +374,30 @@ function KeyStatCard({
         ? "bowling"
         : "batting");
 
-  let headline: string = "—";
-  let label: string = "Average";
+  let headlineValue: number | null = null;
+  let headlineDecimals = 2;
+  let label = "Average";
 
   if (effective === "batting") {
     label = "Batting average";
-    if (slot.batting?.average != null) {
-      headline = slot.batting.average.toFixed(2);
-    }
+    headlineValue = slot.batting?.average ?? null;
+    headlineDecimals = 2;
   } else {
     label = "Wickets";
-    if (slot.bowling != null) {
-      headline = slot.bowling.wickets.toString();
-    }
+    headlineValue = slot.bowling?.wickets ?? null;
+    headlineDecimals = 0;
   }
 
+  const animatedValue = useCountUp(headlineValue ?? 0);
+  const headline =
+    headlineValue == null
+      ? "—"
+      : headlineDecimals === 0
+        ? Math.round(animatedValue).toString()
+        : animatedValue.toFixed(headlineDecimals);
+
   return (
-    <div className="flex min-h-[260px] flex-col justify-between border border-line bg-surface p-6">
+    <div className="flex min-h-[260px] flex-col justify-between border border-line bg-surface p-6 transition-colors duration-150 hover:border-[#333333]">
       <div className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
         {label}
       </div>
@@ -349,7 +413,7 @@ function KeyStatCard({
 
 function MixedRoleNotice() {
   return (
-    <div className="flex items-center justify-center border border-dashed border-line bg-surface px-6 py-8 text-center">
+    <div className="flex items-center justify-center border border-dashed border-line bg-surface px-6 py-8 text-center transition-colors duration-150 hover:border-[#333333]">
       <p className="font-sans text-sm text-fg-secondary">
         Different primary roles — radar needs both players to share a
         discipline. Common-opponents table below still applies.
@@ -376,7 +440,7 @@ function CommonOpponentsTable({ data }: { data: ComparisonResponse }) {
     );
 
   return (
-    <div className="border border-line bg-surface">
+    <div className="border border-line bg-surface transition-colors duration-150 hover:border-[#333333]">
       <div className="border-b border-line p-6">
         <h3 className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
           Head-to-head · common opponents
@@ -441,9 +505,6 @@ function OpponentRow({
   battingMode: boolean;
   bowlingMode: boolean;
 }) {
-  // Spec: "neon lime for better value" — per row, whoever has the
-  // better headline metric (avg / wickets) is highlighted. Ties leave
-  // both sides neutral so the accent stays meaningful.
   let p1Better = false;
   let p2Better = false;
   if (battingMode) {

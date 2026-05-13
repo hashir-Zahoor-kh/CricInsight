@@ -23,7 +23,7 @@ export function PlayerProfileCard({
   profile: ProfileCardType;
 }) {
   return (
-    <div className="relative flex min-h-[140px] flex-col border border-line bg-surface p-6">
+    <div className="relative flex min-h-[140px] flex-col border border-line bg-surface p-6 transition-colors duration-150 hover:border-[#333333]">
       <div className="flex items-start justify-between gap-4">
         <h2 className="font-display text-[48px] uppercase leading-none tracking-tight text-fg">
           {profile.name}
