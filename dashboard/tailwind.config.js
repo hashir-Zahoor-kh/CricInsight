@@ -10,6 +10,21 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Visual Redesign tokens — "PSL Broadcast Command Center"
+        // aesthetic (CLAUDE.md). The legacy pk/ink palettes below
+        // are intentionally kept while pages migrate over.
+        canvas: "#0A0A0A",          // page background
+        surface: "#111111",          // cards
+        elevated: "#1A1A1A",         // surface elevated
+        line: "#222222",             // border
+        primary: "#004225",          // brand green
+        "primary-glow": "#006B3C",   // hover / glow
+        accent: "#CCFF00",           // neon lime — use sparingly
+        fg: {
+          DEFAULT: "#F0F0F0",        // text primary
+          secondary: "#888888",      // text secondary
+          muted: "#444444",          // text muted
+        },
         // Pakistan flag green spectrum — anchored on #01411C as the
         // canonical brand colour (shade 900). Lighter shades for
         // backgrounds and outlines, darker for text on light bg and
@@ -46,16 +61,34 @@ export default {
         },
       },
       fontFamily: {
-        // Inter is loaded via @fontsource in main.tsx (Phase 5.4).
-        // Falling back to system stack so dev still looks fine before
-        // the font finishes loading.
+        // Redesign typography (Google Fonts, loaded in index.html):
+        //   display — Bebas Neue (hero numbers, big titles)
+        //   sans    — DM Sans (body / UI, replaces Inter)
+        //   mono    — JetBrains Mono (stats / numeric data)
+        // Each falls back to a system stack for the brief window
+        // before Google Fonts resolve.
+        display: [
+          "Bebas Neue",
+          "Impact",
+          "system-ui",
+          "sans-serif",
+        ],
         sans: [
+          "DM Sans",
           "Inter",
           "system-ui",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
           "sans-serif",
+        ],
+        mono: [
+          "JetBrains Mono",
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "Consolas",
+          "monospace",
         ],
       },
       // Subtle elevation used on cards + modals. Avoids the default

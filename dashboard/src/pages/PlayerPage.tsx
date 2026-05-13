@@ -90,7 +90,7 @@ export function PlayerPage() {
         <p className="text-ink-600">{player.name}</p>
       </div>
 
-      <PlayerProfileCard profile={profile} accent="primary" />
+      <PlayerProfileCard profile={profile} />
 
       {averageQuery.data && (
         <DataQualityNotice warnings={averageQuery.data.data_quality} />

@@ -1,0 +1,42 @@
+/*
+ * CricInsight — Visual Redesign Design Tokens
+ *
+ * "PSL Broadcast Command Center" — dark, dense, data-rich.
+ * Single source of truth for design tokens consumed by both
+ * Tailwind (via tailwind.config.js) and any raw CSS that needs
+ * the same values. Update both files in lockstep if a token
+ * changes.
+ */
+
+:root {
+  /* ---------- Surfaces ---------- */
+  --color-canvas: #0a0a0a;          /* page background */
+  --color-surface: #111111;          /* cards */
+  --color-elevated: #1a1a1a;         /* surface elevated */
+  --color-line: #222222;             /* borders */
+
+  /* ---------- Brand ---------- */
+  --color-primary: #004225;          /* Pakistan green */
+  --color-primary-glow: #006b3c;     /* hover / glow */
+  --color-accent: #ccff00;           /* neon lime — use SPARINGLY */
+
+  /* ---------- Foreground ---------- */
+  --color-fg: #f0f0f0;               /* text primary */
+  --color-fg-secondary: #888888;     /* text secondary */
+  --color-fg-muted: #444444;         /* text muted */
+
+  /* ---------- Typography ---------- */
+  --font-display: "Bebas Neue", "Impact", system-ui, sans-serif;
+  --font-sans: "DM Sans", "Inter", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular,
+    Menlo, Consolas, monospace;
+
+  /* ---------- Radius ---------- */
+  /* Design rule: 4px max everywhere. No pill-shaped surfaces. */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+
+  /* ---------- Border widths ---------- */
+  --border-hairline: 1px;
+}

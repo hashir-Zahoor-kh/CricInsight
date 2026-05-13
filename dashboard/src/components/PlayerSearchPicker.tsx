@@ -19,10 +19,8 @@ import type { PlayerResponse } from "../api/types";
  *   4. While a player is selected, the input shows the player as a
  *      chip; clicking the chip's × clears it and re-opens the search.
  *
- * The previous implementation was a hardcoded `<select>` of the first
- * 100 players — visibly broken once the bulk Cricsheet load pushed
- * the roster past 3,500. Switching to search avoids the "first page
- * of A-names" pathology and is the right UX for a roster this big.
+ * Visuals are styled against the Visual Redesign dark tokens —
+ * surface card, hairline line border, neon-lime focus ring.
  *
  * Props:
  *   value      Currently-picked player id (null = no selection).
@@ -83,23 +81,26 @@ export function PlayerSearchPicker({
   }, [search.data, excludeId]);
 
   const showDropdown =
-    open && debouncedQuery.length >= 2 && (search.isFetching || filteredResults.length > 0 || !search.isLoading);
+    open &&
+    debouncedQuery.length >= 2 &&
+    (search.isFetching || filteredResults.length > 0 || !search.isLoading);
+
+  const labelClass =
+    "block font-sans text-[11px] uppercase tracking-widest text-fg-secondary";
 
   // ----- selected-player chip view -----
   if (value != null && selected.data) {
     return (
       <div ref={containerRef}>
-        <label className="block text-xs font-medium uppercase tracking-wider text-ink-500">
-          {label}
-        </label>
-        <div className="mt-1 flex items-center justify-between rounded-md border border-pk-300 bg-pk-50 px-3 py-2 text-sm">
-          <span className="flex items-center gap-2 text-ink-900">
+        <label className={labelClass}>{label}</label>
+        <div className="mt-2 flex items-center justify-between border border-line bg-surface px-3 py-2.5 text-sm">
+          <span className="flex items-center gap-2 text-fg">
             <span className="text-base leading-none" aria-hidden>
               {flagFor(selected.data.country)}
             </span>
             <span className="font-medium">{selected.data.name}</span>
             {selected.data.country && (
-              <span className="text-xs text-ink-500">
+              <span className="text-xs text-fg-secondary">
                 · {selected.data.country}
               </span>
             )}
@@ -112,7 +113,7 @@ export function PlayerSearchPicker({
               setQuery("");
               setOpen(true);
             }}
-            className="rounded p-0.5 text-ink-500 hover:bg-pk-100 hover:text-ink-800"
+            className="p-0.5 text-fg-muted transition-colors hover:text-accent"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -124,12 +125,10 @@ export function PlayerSearchPicker({
   // ----- search input view -----
   return (
     <div ref={containerRef} className="relative">
-      <label className="block text-xs font-medium uppercase tracking-wider text-ink-500">
-        {label}
-      </label>
-      <div className="relative mt-1">
+      <label className={labelClass}>{label}</label>
+      <div className="relative mt-2">
         <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400"
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted"
           aria-hidden
         />
         <input
@@ -142,16 +141,16 @@ export function PlayerSearchPicker({
             setOpen(true);
           }}
           placeholder={placeholder}
-          className="w-full rounded-md border border-ink-200 bg-white py-2 pl-8 pr-3 text-sm text-ink-800 focus:border-pk-600 focus:outline-none focus:ring-1 focus:ring-pk-600"
+          className="w-full border border-line bg-surface py-2.5 pl-9 pr-3 text-sm text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
 
       {showDropdown && (
-        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-ink-200 bg-white shadow-card">
+        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto border border-line bg-surface">
           {search.isFetching && filteredResults.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-ink-500">searching…</div>
+            <div className="px-3 py-2 text-xs text-fg-muted">searching…</div>
           ) : filteredResults.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-ink-500">
+            <div className="px-3 py-2 text-xs text-fg-muted">
               No players match "{debouncedQuery}".
             </div>
           ) : (
@@ -172,7 +171,7 @@ export function PlayerSearchPicker({
 
       {/* Helper hint when the user hasn't typed enough yet. */}
       {open && debouncedQuery.length < 2 && (
-        <div className="absolute z-20 mt-1 w-full rounded-md border border-ink-200 bg-white px-3 py-2 text-xs text-ink-500 shadow-card">
+        <div className="absolute z-20 mt-1 w-full border border-line bg-surface px-3 py-2 text-xs text-fg-muted">
           Type at least 2 characters.
         </div>
       )}
@@ -191,16 +190,16 @@ function SuggestionRow({
     <button
       type="button"
       onClick={onPick}
-      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-pk-50 focus:bg-pk-50 focus:outline-none"
+      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-elevated focus:bg-elevated focus:outline-none"
     >
       <span className="flex items-center gap-2 truncate">
         <span className="text-base leading-none" aria-hidden>
           {flagFor(player.country)}
         </span>
-        <span className="truncate font-medium text-ink-800">{player.name}</span>
+        <span className="truncate font-medium text-fg">{player.name}</span>
       </span>
       {player.country && (
-        <span className="flex-shrink-0 text-xs text-ink-500">
+        <span className="flex-shrink-0 text-xs text-fg-secondary">
           {player.country}
         </span>
       )}
