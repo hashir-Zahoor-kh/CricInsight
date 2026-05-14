@@ -26,7 +26,7 @@ if not BUCKET:
     sys.exit(1)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = REPO_ROOT / "backend" / "cricsheet_data"
+DATA_DIR = REPO_ROOT / "backend" / "ingestion" / "cricsheet_data"
 
 if not DATA_DIR.exists():
     print(f"Error: data directory not found: {DATA_DIR}", file=sys.stderr)

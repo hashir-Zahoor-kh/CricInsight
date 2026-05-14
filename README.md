@@ -205,62 +205,75 @@ between tests, drop on session teardown.
 
 ## Deployment
 
-### Backend → Railway
+The production stack is **Render** (backend) + **Vercel** (frontend) + **AWS**
+(ECR image registry, S3 for Cricsheet archives, CloudWatch for logs).
 
-1. Push to GitHub — Railway picks up `railway.toml` at the repo root and
-   auto-deploys on every push to `main`.
-2. Set environment variables in the Railway dashboard:
+```
+  Vercel (React SPA)
+      │  HTTPS API calls
+      ▼
+  Render Web Service  ──► AWS CloudWatch (/cricinsight/backend)
+      │  docker image
+      ▼
+  AWS ECR  (802531653822.dkr.ecr.us-east-1.amazonaws.com/cricinsight-backend)
+      │  DATABASE_URL
+      ▼
+  Render PostgreSQL (cricinsight-db, free plan)
+```
 
-   | Variable | Example / notes |
-   |---|---|
-   | `DATABASE_URL` | `postgresql+asyncpg://user:pass@host:5432/cricinsight` |
-   | `DATABASE_URL_SYNC` | Same URL with `+psycopg2` driver (used by Alembic) |
-   | `ALLOWED_ORIGINS` | `https://cricinsight.vercel.app` |
-   | `ENVIRONMENT` | `production` |
-   | `CRICAPI_KEY` | Optional — only needed for the live scores feed |
+### Backend → Render
 
-   Railway injects `PORT` automatically; `railway.toml` passes it straight
-   through to `uvicorn --port $PORT`.
+`render.yaml` at the repo root defines the service. Connect the GitHub repo
+in the Render dashboard and it will auto-detect the file.
 
-3. The `/health` endpoint is the Railway health check target — it runs a
-   `SELECT 1` against the DB and reports `degraded` if unreachable.
+Set these env vars in the Render dashboard (marked `sync: false` in the YAML,
+meaning Render won't auto-populate them):
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL_SYNC` | Same host as `DATABASE_URL` but with `+psycopg2` driver (for Alembic) |
+| `CRICAPI_KEY` | CricAPI free-tier key (live scores feed) |
+| `ALLOWED_ORIGINS` | `https://<your-vercel-app>.vercel.app` |
+| `AWS_ACCESS_KEY_ID` | IAM key for CloudWatch + S3 access |
+| `AWS_SECRET_ACCESS_KEY` | Matching IAM secret |
+
+The service auto-redeploys on every push to `main`. `/health` is the health
+check path — Render replaces the instance if it returns non-200.
 
 ### Frontend → Vercel
 
-1. Import the repo in Vercel and set **Root Directory** → `dashboard`.
+1. Import the repo in Vercel → set **Root Directory** to `dashboard`.
 2. Build command: `npm run build` · Output directory: `dist`.
-3. Add an environment variable: `VITE_API_URL=<your Railway URL>`.
-4. `dashboard/vercel.json` rewrites all paths to `index.html` so React
-   Router deep-links work on hard refresh.
+3. `dashboard/vercel.json` rewrites all paths to `index.html` so React Router
+   deep-links survive hard refresh.
 
-### Backend → AWS ECR + ECS (alternative)
+### Docker image → AWS ECR
+
+The Render service pulls the image from ECR. Push a new image after any
+backend change:
 
 ```bash
-export AWS_ACCOUNT_ID=123456789012
+export AWS_ACCOUNT_ID=802531653822
 export AWS_REGION=us-east-1
-bash scripts/push_to_ecr.sh          # builds backend/Dockerfile, creates ECR repo, pushes
+bash scripts/push_to_ecr.sh
+# → 802531653822.dkr.ecr.us-east-1.amazonaws.com/cricinsight-backend:latest
 ```
 
-Then point your ECS task definition at the pushed image. Useful env vars on
-the task:
+### Cricsheet archives → AWS S3
 
-| Variable | Purpose |
-|---|---|
-| `AWS_CLOUDWATCH_LOG_GROUP` | Enables watchtower → ships logs to CloudWatch |
-| `AWS_SECRET_ARN` | Secrets Manager ARN holding DB credentials |
-| `CRICSHEET_S3_BUCKET` | S3 bucket for Cricsheet archives (seed CLI) |
-
-### Cricsheet data → S3
-
-If running the seed CLI from ECS, upload the local archives first:
+The seed CLI reads Cricsheet JSON from disk. To seed a fresh Render instance,
+upload the archives to S3 first, then pull them down inside the service:
 
 ```bash
-export CRICSHEET_S3_BUCKET=my-cricinsight-data
-python scripts/upload_cricsheet_to_s3.py
+export CRICSHEET_S3_BUCKET=cricinsight-data-802531653822
+python scripts/upload_cricsheet_to_s3.py   # uploads 6 691 files
 ```
 
-Uploads everything under `backend/cricsheet_data/` preserving directory
-structure as S3 keys under `cricsheet_data/`.
+### CloudWatch logs
+
+Set `AWS_CLOUDWATCH_LOG_GROUP=/cricinsight/backend` in Render. The
+`watchtower` handler in `app/main.py` will ship every log line to the
+`/cricinsight/backend` log group in `us-east-1`.
 
 ---
 
