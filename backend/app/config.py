@@ -48,6 +48,10 @@ class Settings(BaseSettings):
         default="INFO",
         description="Root logger level. Override to DEBUG for SQL traces.",
     )
+    port: int = Field(
+        default=8000,
+        description="Port uvicorn binds on. Overridden by $PORT at runtime (Railway/ECS).",
+    )
 
     # --- Database ---
     # async URL for the FastAPI runtime (asyncpg driver)
@@ -84,22 +88,46 @@ class Settings(BaseSettings):
     # --- AWS ---
     aws_region: str = Field(default="us-east-1")
 
-    # --- CORS — comma-separated origins ---
-    # Default includes both localhost AND 127.0.0.1 variants because
-    # CRA's dev server resolves to one or the other depending on how
-    # it was launched. Listing both up front keeps the dashboard from
-    # tripping into a CORS error after a routine `npm start`.
+    # Optional AWS integrations — all None by default so the app runs
+    # cleanly without any AWS credentials in local dev.
+    aws_cloudwatch_log_group: str | None = Field(
+        default=None,
+        description="CloudWatch log group name. When set, watchtower ships logs to AWS.",
+    )
+    aws_secret_arn: str | None = Field(
+        default=None,
+        description="Secrets Manager ARN for DB credentials (ECS task role pattern).",
+    )
+    cricsheet_s3_bucket: str | None = Field(
+        default=None,
+        description="S3 bucket holding Cricsheet archives for ECS-based seed runs.",
+    )
+
+    # --- CORS ---
+    # ALLOWED_ORIGINS is the canonical field (Railway / Vercel deploy sets it
+    # to the Vercel preview URL). The old cors_origins field is preserved so
+    # existing .env files keep working — both feed the same middleware.
+    allowed_origins: list[str] = Field(
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        description="Allowed CORS origins. Set as a comma-separated string in the env.",
+    )
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def _parse_allowed_origins(cls, v: object) -> list[str]:
+        if isinstance(v, str):
+            return [o.strip() for o in v.split(",") if o.strip()]
+        return v  # type: ignore[return-value]
+
+    # Legacy field kept for backwards-compat with existing .env files that
+    # set CORS_ORIGINS. If both are set, ALLOWED_ORIGINS wins (it's listed
+    # first in the middleware call).
     cors_origins: str = Field(
-        # 3000 is the project convention (vite.config.ts forces it +
-        # docker-compose maps it). 5173 is Vite's default in case
-        # someone runs `npm run dev` from a fresh checkout where
-        # strictPort:true falls back, or uses a slightly different
-        # config locally.
         default=(
             "http://localhost:3000,http://127.0.0.1:3000,"
             "http://localhost:5173,http://127.0.0.1:5173"
         ),
-        description="Comma-separated list of origins allowed to call the API.",
+        description="Comma-separated CORS origins (legacy — prefer ALLOWED_ORIGINS).",
     )
 
     @property

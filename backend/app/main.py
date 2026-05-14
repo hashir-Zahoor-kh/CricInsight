@@ -18,6 +18,7 @@ things:
 from __future__ import annotations
 
 import logging
+import logging.config
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -30,6 +31,35 @@ from .database import dispose_engine, get_session_factory
 from .routers import analytics, live, matches, players
 
 logger = logging.getLogger(__name__)
+
+
+def _configure_logging() -> None:
+    """Set up root logger. Adds a CloudWatch handler when
+    AWS_CLOUDWATCH_LOG_GROUP is set; otherwise stdout only."""
+    settings = get_settings()
+    logging.basicConfig(
+        level=settings.log_level.upper(),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+    if settings.aws_cloudwatch_log_group:
+        try:
+            import watchtower  # noqa: PLC0415 — optional dep, prod images only
+            cw = watchtower.CloudWatchLogHandler(
+                log_group_name=settings.aws_cloudwatch_log_group,
+            )
+            cw.setFormatter(
+                logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+            )
+            logging.getLogger().addHandler(cw)
+            logger.info(
+                "CloudWatch logging enabled → log group: %s",
+                settings.aws_cloudwatch_log_group,
+            )
+        except Exception as exc:
+            logger.warning("CloudWatch logging setup failed (stdout only): %s", exc)
+
+
+_configure_logging()
 
 
 # ---------------------------------------------------------------- lifespan
@@ -91,7 +121,7 @@ def _build_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins_list,
+        allow_origins=settings.allowed_origins,
         allow_credentials=True,
         # Keep methods/headers wide-open for now — the dashboard only
         # GETs anyway, but later admin endpoints may POST.

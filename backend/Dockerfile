@@ -33,6 +33,8 @@ COPY . .
 
 EXPOSE 8000
 
-# uvicorn with --reload is convenient locally but disabled in prod images.
-# docker-compose overrides this command for hot-reload during development.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form so $PORT is expanded at container start — Railway, ECS, and
+# Cloud Run all inject PORT at runtime. Falls back to 8000 for plain
+# `docker run` without -e PORT. `exec` gives uvicorn PID 1 so SIGTERM
+# from the orchestrator is delivered directly and triggers graceful shutdown.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

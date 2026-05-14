@@ -203,6 +203,67 @@ between tests, drop on session teardown.
 
 ---
 
+## Deployment
+
+### Backend → Railway
+
+1. Push to GitHub — Railway picks up `railway.toml` at the repo root and
+   auto-deploys on every push to `main`.
+2. Set environment variables in the Railway dashboard:
+
+   | Variable | Example / notes |
+   |---|---|
+   | `DATABASE_URL` | `postgresql+asyncpg://user:pass@host:5432/cricinsight` |
+   | `DATABASE_URL_SYNC` | Same URL with `+psycopg2` driver (used by Alembic) |
+   | `ALLOWED_ORIGINS` | `https://cricinsight.vercel.app` |
+   | `ENVIRONMENT` | `production` |
+   | `CRICAPI_KEY` | Optional — only needed for the live scores feed |
+
+   Railway injects `PORT` automatically; `railway.toml` passes it straight
+   through to `uvicorn --port $PORT`.
+
+3. The `/health` endpoint is the Railway health check target — it runs a
+   `SELECT 1` against the DB and reports `degraded` if unreachable.
+
+### Frontend → Vercel
+
+1. Import the repo in Vercel and set **Root Directory** → `dashboard`.
+2. Build command: `npm run build` · Output directory: `dist`.
+3. Add an environment variable: `VITE_API_URL=<your Railway URL>`.
+4. `dashboard/vercel.json` rewrites all paths to `index.html` so React
+   Router deep-links work on hard refresh.
+
+### Backend → AWS ECR + ECS (alternative)
+
+```bash
+export AWS_ACCOUNT_ID=123456789012
+export AWS_REGION=us-east-1
+bash scripts/push_to_ecr.sh          # builds backend/Dockerfile, creates ECR repo, pushes
+```
+
+Then point your ECS task definition at the pushed image. Useful env vars on
+the task:
+
+| Variable | Purpose |
+|---|---|
+| `AWS_CLOUDWATCH_LOG_GROUP` | Enables watchtower → ships logs to CloudWatch |
+| `AWS_SECRET_ARN` | Secrets Manager ARN holding DB credentials |
+| `CRICSHEET_S3_BUCKET` | S3 bucket for Cricsheet archives (seed CLI) |
+
+### Cricsheet data → S3
+
+If running the seed CLI from ECS, upload the local archives first:
+
+```bash
+export CRICSHEET_S3_BUCKET=my-cricinsight-data
+python scripts/upload_cricsheet_to_s3.py
+```
+
+Uploads everything under `backend/cricsheet_data/` preserving directory
+structure as S3 keys under `cricsheet_data/`.
+
+---
+
 ## The Cricsheet pivot
 
 The project originally targeted CricAPI's free tier. After
