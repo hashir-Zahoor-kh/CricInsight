@@ -17,17 +17,50 @@ from app.models.enums import MatchType
 
 router = APIRouter(prefix="/players", tags=["players"])
 
+# Canonical list of ICC Full Members (i.e. the 12 nations with Test
+# status). The Cricsheet bulk load includes domestic / club / age-group
+# rosters from dozens of associate countries; the dashboard's hero
+# comparison flow is international-only, so we filter at the API layer
+# by default. Callers wanting the full roster can opt out by passing
+# `test_nations_only=false`.
+TEST_PLAYING_NATIONS: tuple[str, ...] = (
+    "Afghanistan",
+    "Australia",
+    "Bangladesh",
+    "England",
+    "India",
+    "Ireland",
+    "New Zealand",
+    "Pakistan",
+    "South Africa",
+    "Sri Lanka",
+    "West Indies",
+    "Zimbabwe",
+)
+
 
 @router.get("", response_model=list[PlayerResponse], summary="List players (paginated).")
 async def get_players(
     name: str | None = Query(default=None, description="Case-insensitive substring match."),
     country: str | None = Query(default=None),
+    test_nations_only: bool = Query(
+        default=True,
+        description=(
+            "When true (default), restrict results to the 12 ICC Full Member "
+            "nations. Set false to include domestic / associate rosters."
+        ),
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db),
 ) -> list[PlayerResponse]:
     rows, _total = await list_players(
-        session, name=name, country=country, limit=limit, offset=offset
+        session,
+        name=name,
+        country=country,
+        countries=list(TEST_PLAYING_NATIONS) if test_nations_only else None,
+        limit=limit,
+        offset=offset,
     )
     return [PlayerResponse.model_validate(r, from_attributes=True) for r in rows]
 
@@ -35,10 +68,23 @@ async def get_players(
 @router.get("/search", response_model=list[PlayerResponse], summary="Search players by name.")
 async def search_players(
     name: str = Query(..., min_length=1, description="Substring of player name."),
+    test_nations_only: bool = Query(
+        default=True,
+        description=(
+            "When true (default), restrict results to the 12 ICC Full Member "
+            "nations. Set false to include domestic / associate rosters."
+        ),
+    ),
     limit: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
 ) -> list[PlayerResponse]:
-    rows, _ = await list_players(session, name=name, limit=limit, offset=0)
+    rows, _ = await list_players(
+        session,
+        name=name,
+        countries=list(TEST_PLAYING_NATIONS) if test_nations_only else None,
+        limit=limit,
+        offset=0,
+    )
     return [PlayerResponse.model_validate(r, from_attributes=True) for r in rows]
 
 
@@ -70,14 +116,7 @@ async def get_player_stats(
         raise HTTPException(status_code=404, detail=f"Player not found: id={player_id}")
     profile = await _build_profile(session, player)
 
-    # If a format is supplied, scope the rollup. Otherwise aggregate
-    # across formats by computing each one and merging — but for now
-    # the router requires a format for honest stats (cross-format
-    # rollups invent meaningless averages). The router exposes the
-    # format-scoped path; cross-format will land later if needed.
     if format is None:
-        # Return the profile with empty stats — the dashboard prompts
-        # the user to pick a format.
         return PlayerWithStats(
             id=player.id,
             external_id=player.external_id,

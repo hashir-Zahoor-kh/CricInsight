@@ -56,21 +56,33 @@ export function useHealth(): UseQueryResult<HealthResponse> {
 export interface PlayerListParams {
   name?: string;
   country?: string;
+  /** When true (default), restricts results to the 12 ICC Full Member
+   *  nations. Set false to include domestic / associate rosters. */
+  test_nations_only?: boolean;
   limit?: number;
   offset?: number;
 }
 
 export function usePlayers(params: PlayerListParams = {}): UseQueryResult<PlayerResponse[]> {
+  const effective: PlayerListParams = { test_nations_only: true, ...params };
   return useQuery<PlayerResponse[]>({
-    queryKey: ["players", params],
-    queryFn: () => getJson<PlayerResponse[]>("/api/v1/players", params),
+    queryKey: ["players", effective],
+    queryFn: () => getJson<PlayerResponse[]>("/api/v1/players", effective),
   });
 }
 
-export function usePlayerSearch(name: string): UseQueryResult<PlayerResponse[]> {
+export function usePlayerSearch(
+  name: string,
+  options: { testNationsOnly?: boolean } = {}
+): UseQueryResult<PlayerResponse[]> {
+  const testNationsOnly = options.testNationsOnly ?? true;
   return useQuery<PlayerResponse[]>({
-    queryKey: ["players", "search", name],
-    queryFn: () => getJson<PlayerResponse[]>("/api/v1/players/search", { name }),
+    queryKey: ["players", "search", name, testNationsOnly],
+    queryFn: () =>
+      getJson<PlayerResponse[]>("/api/v1/players/search", {
+        name,
+        test_nations_only: testNationsOnly,
+      }),
     // Skip the request until the user has typed at least 2 chars —
     // saves quota on rapid typing and avoids server-side 422s.
     enabled: name.length >= 2,

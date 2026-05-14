@@ -80,6 +80,55 @@ class TestPlayersRouter:
         assert "Virat Kohli" not in names
 
     @pytest.mark.asyncio
+    async def test_test_nations_filter_excludes_associates(
+        self, client: AsyncClient, async_db_session: AsyncSession
+    ):
+        # Two players share the same name but represent different nations.
+        # Default test_nations_only=true must return only the Pakistani
+        # entry; opting out must return both.
+        async_db_session.add_all([
+            Player(
+                external_id="ext-shaheen-pk",
+                name="Shaheen Afridi",
+                country="Pakistan",
+                role=PlayerRole.BOWLER,
+            ),
+            Player(
+                external_id="ext-shaheen-ls",
+                name="Shaheen Afridi",
+                country="Lesotho",
+                role=PlayerRole.BOWLER,
+            ),
+        ])
+        await async_db_session.commit()
+
+        # Default (test_nations_only=true) → Pakistan only.
+        resp = await client.get("/api/v1/players")
+        assert resp.status_code == 200
+        countries = sorted(p["country"] for p in resp.json())
+        assert countries == ["Pakistan"]
+
+        # Opt-out → both rows.
+        resp = await client.get("/api/v1/players?test_nations_only=false")
+        assert resp.status_code == 200
+        countries = sorted(p["country"] for p in resp.json())
+        assert countries == ["Lesotho", "Pakistan"]
+
+        # /search default → Pakistan only.
+        resp = await client.get("/api/v1/players/search?name=shaheen")
+        assert resp.status_code == 200
+        countries = sorted(p["country"] for p in resp.json())
+        assert countries == ["Pakistan"]
+
+        # /search opt-out → both rows.
+        resp = await client.get(
+            "/api/v1/players/search?name=shaheen&test_nations_only=false"
+        )
+        assert resp.status_code == 200
+        countries = sorted(p["country"] for p in resp.json())
+        assert countries == ["Lesotho", "Pakistan"]
+
+    @pytest.mark.asyncio
     async def test_get_one_404(self, client: AsyncClient):
         resp = await client.get("/api/v1/players/9999")
         assert resp.status_code == 404
