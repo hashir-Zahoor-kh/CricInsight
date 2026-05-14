@@ -169,6 +169,45 @@ class TestCareerRollups:
                 innings_number=1,
             )
 
+    def test_bowling_career_stats_has_wickets_per_match_and_dot_ball_pct(self):
+        # New fields added in Feature 1 for the bowling radar.
+        # wickets_per_match must accept a non-negative float OR null.
+        # dot_ball_pct is reserved-null (no ball-by-ball storage yet)
+        # but must be representable and constrained to [0, 100].
+        bs = BowlingCareerStats(
+            matches=10,
+            innings=10,
+            overs_bowled=40.0,
+            runs_conceded=200,
+            wickets=15,
+            average=13.33,
+            economy=5.0,
+            bowling_strike_rate=16.0,
+            wickets_per_match=1.5,
+            dot_ball_pct=None,
+            five_wicket_hauls=1,
+            best_figures="4/22",
+        )
+        assert bs.wickets_per_match == 1.5
+        assert bs.dot_ball_pct is None
+
+        # And the defaults: omitting both should still construct cleanly.
+        bs_defaults = BowlingCareerStats(
+            matches=0, innings=0, overs_bowled=0, runs_conceded=0, wickets=0,
+            five_wicket_hauls=0,
+        )
+        assert bs_defaults.wickets_per_match is None
+        assert bs_defaults.dot_ball_pct is None
+
+    def test_dot_ball_pct_rejects_values_above_100(self):
+        with pytest.raises(ValidationError):
+            BowlingCareerStats(
+                matches=10, innings=10, overs_bowled=40.0,
+                runs_conceded=200, wickets=15,
+                five_wicket_hauls=1,
+                dot_ball_pct=150.0,  # out of [0, 100]
+            )
+
 
 # ====================================================================
 # FormGuideEntry — both halves nullable, mutually independent

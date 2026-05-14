@@ -81,19 +81,30 @@ class PlayerNotFound(Exception):
 # primary_role derivation
 # ====================================================================
 
-async def _derive_primary_role(
+async def _derive_roles(
     session: AsyncSession, player: Player
-) -> PlayerRole:
-    """If `player.role` is set, use it. Otherwise infer from stat
-    counts: more batting innings than bowling → BATSMAN, etc.
+) -> tuple[PlayerRole, PlayerRole | None]:
+    """Return (primary_role, secondary_role) for a player.
 
-    Heuristic only fires when CricAPI didn't tag the player. Default
-    fall-through is BATSMAN since most players we'd otherwise be
-    guessing about are top/middle-order specialists.
+    primary_role rules (Feature 1.2 explicit form):
+      * Declared `player.role` wins if present.
+      * 0 batting innings + >0 bowling innings → BOWLER.
+      * >0 batting innings + 0 bowling innings → BATSMAN.
+      * Both > 0 → 1.5× innings-ratio decides BATSMAN vs BOWLER vs
+        ALL_ROUNDER.
+      * 0 + 0 → BATSMAN (sensible default for the cold-start case).
+
+    secondary_role surfaces a non-trivial second skill so the
+    dashboard can label "primarily a bowler, also a batter" without
+    re-doing the analytics on the client:
+      * primary BATSMAN / WICKETKEEPER with any bowling innings
+        → secondary BOWLER
+      * primary BOWLER with any batting innings
+        → secondary BATSMAN
+      * primary ALL_ROUNDER → secondary reflects the dominant side
+        (BATSMAN if bat innings ≥ bowl innings, else BOWLER).
+      * Otherwise null.
     """
-    if player.role is not None:
-        return player.role
-
     bat_innings = await session.scalar(
         select(func.count(BattingStats.id)).where(BattingStats.player_id == player.id)
     ) or 0
@@ -101,14 +112,51 @@ async def _derive_primary_role(
         select(func.count(BowlingStats.id)).where(BowlingStats.player_id == player.id)
     ) or 0
 
-    if bat_innings == 0 and bowl_innings == 0:
-        return PlayerRole.BATSMAN
-    # Both substantial → all-rounder; otherwise pick the dominant side.
-    if bat_innings >= 1.5 * bowl_innings:
-        return PlayerRole.BATSMAN
-    if bowl_innings >= 1.5 * bat_innings:
-        return PlayerRole.BOWLER
-    return PlayerRole.ALL_ROUNDER
+    # ---- primary ----
+    if player.role is not None:
+        primary = player.role
+    elif bat_innings == 0 and bowl_innings == 0:
+        primary = PlayerRole.BATSMAN
+    elif bat_innings == 0 and bowl_innings > 0:
+        primary = PlayerRole.BOWLER
+    elif bowl_innings == 0 and bat_innings > 0:
+        primary = PlayerRole.BATSMAN
+    elif bat_innings >= 1.5 * bowl_innings:
+        primary = PlayerRole.BATSMAN
+    elif bowl_innings >= 1.5 * bat_innings:
+        primary = PlayerRole.BOWLER
+    else:
+        primary = PlayerRole.ALL_ROUNDER
+
+    # ---- secondary ----
+    secondary: PlayerRole | None = None
+    if primary in (PlayerRole.BATSMAN, PlayerRole.WICKETKEEPER):
+        if bowl_innings > 0:
+            secondary = PlayerRole.BOWLER
+    elif primary is PlayerRole.BOWLER:
+        if bat_innings > 0:
+            secondary = PlayerRole.BATSMAN
+    elif primary is PlayerRole.ALL_ROUNDER:
+        # All-rounder already implies both sides — surface the
+        # dominant skill as a tiebreaker so the dashboard can render
+        # an "all-rounder · leans batting" tag.
+        secondary = (
+            PlayerRole.BATSMAN
+            if bat_innings >= bowl_innings
+            else PlayerRole.BOWLER
+        )
+
+    return primary, secondary
+
+
+async def _derive_primary_role(
+    session: AsyncSession, player: Player
+) -> PlayerRole:
+    """Back-compat shim — Feature 1.2 added _derive_roles which
+    returns the (primary, secondary) tuple. Older call sites that
+    only need primary call this thin wrapper."""
+    primary, _ = await _derive_roles(session, player)
+    return primary
 
 
 # ====================================================================
@@ -249,8 +297,19 @@ async def _bowling_career_stats(
 
     best_figures = await _best_bowling_figures(session, player_id, fmt)
 
+    matches = int(row.matches or 0)
+    # wickets_per_match: derived metric for the bowling radar's
+    # "high is better" axis. Null when matches == 0 so the dashboard
+    # can distinguish "no data" from "0 wickets per match".
+    wickets_per_match = (
+        round(wickets / matches, 2) if matches > 0 else None
+    )
+    # dot_ball_pct stays None — needs ball-by-ball storage. Reserved
+    # as a null field on the response so the API contract is stable
+    # when we move to per-delivery ingestion.
+
     return BowlingCareerStats(
-        matches=int(row.matches or 0),
+        matches=matches,
         innings=innings,
         overs_bowled=overs,
         runs_conceded=runs_conceded,
@@ -258,6 +317,8 @@ async def _bowling_career_stats(
         average=average,
         economy=economy,
         bowling_strike_rate=bowling_sr,
+        wickets_per_match=wickets_per_match,
+        dot_ball_pct=None,
         five_wicket_hauls=int(row.five_fers or 0),
         best_figures=best_figures,
     )
@@ -568,6 +629,14 @@ async def build_comparison(
     p1_profile = await _build_profile(session, p1)
     p2_profile = await _build_profile(session, p2)
 
+    # Pull secondary roles separately so the slot can surface them.
+    # Cheap — _derive_roles re-runs the inning counts but those queries
+    # are millisecond on indexed FKs. Could be unified with _build_profile
+    # in a future refactor; keeping it minimal here for the Feature 1.2
+    # diff.
+    _, p1_secondary = await _derive_roles(session, p1)
+    _, p2_secondary = await _derive_roles(session, p2)
+
     # Decide which panels to populate per side, based on primary_role.
     #
     # Pure batters → batting panel only.
@@ -652,12 +721,14 @@ async def build_comparison(
             batting=p1_bat,
             bowling=p1_bowl,
             form_guide=p1_form,
+            secondary_role=p1_secondary,
         ),
         player2=PlayerComparisonSlot(
             profile=p2_profile,
             batting=p2_bat,
             bowling=p2_bowl,
             form_guide=p2_form,
+            secondary_role=p2_secondary,
         ),
         common_opponents=common,
         data_quality=warnings,

@@ -85,6 +85,14 @@ class BowlingCareerStats(BaseModel):
     # Bowling strike rate: balls bowled / wickets — different concept
     # from batting SR; sharing the field name would be misleading.
     bowling_strike_rate: float | None = Field(default=None, ge=0)
+    # Wickets per match — derived rather than raw, so the dashboard's
+    # bowling radar can use a "high is better" axis without needing
+    # to divide on the client. Null when matches == 0.
+    wickets_per_match: float | None = Field(default=None, ge=0)
+    # Dot-ball percentage — not derivable from per-innings aggregates;
+    # would need ball-by-ball storage. Reserved as null so the API
+    # contract is stable when we move to ball-level data.
+    dot_ball_pct: float | None = Field(default=None, ge=0, le=100)
     five_wicket_hauls: int = Field(ge=0)
     best_figures: str | None = None  # "5/28" — not parseable into a number
 
@@ -160,6 +168,12 @@ class PlayerComparisonSlot(BaseModel):
     bowling: BowlingCareerStats | None = None
     # Most recent innings first; capped at 10 by the service layer.
     form_guide: list[FormGuideEntry] = Field(default_factory=list, max_length=10)
+    # Secondary role surfaces a non-trivial second skill so the
+    # dashboard can label "primarily a bowler, also a batter" without
+    # re-doing the analytics on the client. Null when the player has
+    # only one skill in evidence. See _derive_roles in services for
+    # the exact rules.
+    secondary_role: PlayerRole | None = None
 
 
 # ====================================================================

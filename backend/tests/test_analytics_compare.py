@@ -485,6 +485,129 @@ class TestAllRounder:
 # Data-quality threshold
 # ====================================================================
 
+class TestRoleDetection:
+    """Feature 1.2 rules: a player with only bowling innings gets
+    primary_role=BOWLER explicitly, and any player with non-trivial
+    activity on a second skill exposes a non-null secondary_role on
+    their PlayerComparisonSlot."""
+
+    @pytest.mark.asyncio
+    async def test_pure_bowler_gets_bowler_role(
+        self, client: AsyncClient, async_db_session: AsyncSession
+    ):
+        # Player with NO declared role so the heuristic actually fires.
+        # 6 bowling innings, 0 batting innings → primary_role = BOWLER.
+        pure_bowler = await _make_player(
+            async_db_session, name="Pure Bowler",
+            country="Pakistan", role=None,
+            batting_style=None, bowling_style="Right-arm fast",
+        )
+        # A peer to compare against so the endpoint doesn't 422 on
+        # self-comparison.
+        peer = await _make_player(
+            async_db_session, name="Peer Batter",
+            country="India", role=PlayerRole.BATSMAN,
+        )
+        for i in range(6):
+            m = await _make_match(
+                async_db_session, external_id=f"m-pb-{i}",
+                fmt=MatchType.T20I, team1="Pakistan", team2="India",
+                date=datetime(2025, 5, 1 + i, tzinfo=timezone.utc),
+            )
+            await _bowl(async_db_session, player=pure_bowler, match=m, wickets=2)
+            # Peer also needs ≥5 batting innings so /compare gives back
+            # a populated response on both sides.
+            await _bat(async_db_session, player=peer, match=m, runs=40 + i)
+        await async_db_session.commit()
+
+        resp = await client.get(
+            f"/api/v1/analytics/compare"
+            f"?player1_id={pure_bowler.id}&player2_id={peer.id}&format=T20I"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["player1"]["profile"]["primary_role"] == "bowler"
+        # Bowling section populated, batting section None.
+        assert body["player1"]["bowling"] is not None
+        assert body["player1"]["batting"] is None
+        # No secondary role since they have zero batting innings.
+        assert body["player1"]["secondary_role"] is None
+
+    @pytest.mark.asyncio
+    async def test_allrounder_has_secondary_role(
+        self, client: AsyncClient, async_db_session: AsyncSession
+    ):
+        # Player with BOTH batting and bowling innings but skewed
+        # enough to land in BATSMAN or BOWLER primary, exposing a
+        # non-null secondary_role on the slot.
+        mixed = await _make_player(
+            async_db_session, name="Mixed Skill",
+            country="Pakistan", role=None,
+        )
+        peer = await _make_player(
+            async_db_session, name="Peer Two",
+            country="India", role=PlayerRole.BATSMAN,
+        )
+        # 6 matches: bats in all six, bowls in four → bat_innings=6,
+        # bowl_innings=4 → 1.5×4=6, bat(6) >= 1.5×bowl(4) is true →
+        # BATSMAN. Then secondary should be BOWLER (bowl>0).
+        for i in range(6):
+            m = await _make_match(
+                async_db_session, external_id=f"m-mx-{i}",
+                fmt=MatchType.T20I, team1="Pakistan", team2="India",
+                date=datetime(2025, 5, 1 + i, tzinfo=timezone.utc),
+            )
+            await _bat(async_db_session, player=mixed, match=m, runs=30 + i)
+            if i < 4:
+                await _bowl(async_db_session, player=mixed, match=m, wickets=1)
+            await _bat(async_db_session, player=peer, match=m, runs=40 + i)
+        await async_db_session.commit()
+
+        resp = await client.get(
+            f"/api/v1/analytics/compare"
+            f"?player1_id={mixed.id}&player2_id={peer.id}&format=T20I"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Primary should be BATSMAN (more batting innings); secondary
+        # should be BOWLER (they also bowl).
+        assert body["player1"]["profile"]["primary_role"] == "batsman"
+        assert body["player1"]["secondary_role"] == "bowler"
+
+    @pytest.mark.asyncio
+    async def test_pure_batter_has_no_secondary_role(
+        self, client: AsyncClient, async_db_session: AsyncSession
+    ):
+        # Sanity guard the symmetric case: a player with zero bowling
+        # innings must NOT get a phantom secondary_role.
+        batter = await _make_player(
+            async_db_session, name="Just A Batter",
+            country="Pakistan", role=None,
+        )
+        peer = await _make_player(
+            async_db_session, name="Other Batter",
+            country="India", role=PlayerRole.BATSMAN,
+        )
+        for i in range(6):
+            m = await _make_match(
+                async_db_session, external_id=f"m-jab-{i}",
+                fmt=MatchType.T20I, team1="Pakistan", team2="India",
+                date=datetime(2025, 5, 1 + i, tzinfo=timezone.utc),
+            )
+            await _bat(async_db_session, player=batter, match=m, runs=40 + i)
+            await _bat(async_db_session, player=peer, match=m, runs=30 + i)
+        await async_db_session.commit()
+
+        resp = await client.get(
+            f"/api/v1/analytics/compare"
+            f"?player1_id={batter.id}&player2_id={peer.id}&format=T20I"
+        )
+        body = resp.json()
+        assert body["player1"]["profile"]["primary_role"] == "batsman"
+        assert body["player1"]["secondary_role"] is None
+
+
+# ====================================================================
 class TestDataQualityThreshold:
     """Per the user contract: <5 innings produces a 200 with a
     data_quality warning, NOT a 404 or a misleading two-innings avg."""

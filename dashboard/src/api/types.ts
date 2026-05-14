@@ -100,6 +100,10 @@ export interface BowlingCareerStats {
   economy: number | null;
   /** Bowling SR = balls bowled / wickets. Different from batting SR. */
   bowling_strike_rate: number | null;
+  /** Derived: wickets / matches. Null when matches === 0. */
+  wickets_per_match: number | null;
+  /** Reserved — requires ball-by-ball storage. Always null today. */
+  dot_ball_pct: number | null;
   five_wicket_hauls: number;
   best_figures: string | null;
 }
@@ -152,6 +156,9 @@ export interface PlayerComparisonSlot {
   bowling: BowlingCareerStats | null;
   /** Capped at 10 by the server (Pydantic max_length=10). */
   form_guide: FormGuideEntry[];
+  /** Surfaces a non-trivial second skill — e.g. a primary-bowler
+   *  who also bats. Null when only one skill is in evidence. */
+  secondary_role: PlayerRole | null;
 }
 
 /** Mirrors Pydantic `ComparisonResponse` — the flagship response. */
