@@ -16,7 +16,7 @@ import type {
 } from "../api/types";
 
 /**
- * Hero radar chart for the comparison page. Builds a 5-axis profile
+ * Hero radar chart for the Bento Grid. Builds a 5-axis profile
  * normalised to [0, 100] so two players' radar shapes are directly
  * comparable regardless of absolute scale.
  *
@@ -31,11 +31,17 @@ import type {
  * Inverted dimensions: lower-is-better stats (economy, average) are
  * mirrored so a longer radar arm always means "better player",
  * preserving the visual intuition of the chart.
+ *
+ * Palette (Visual Redesign spec):
+ *   P1 = neon lime accent, P2 = primary green, grid = elevated.
  */
 type Mode = "batting" | "bowling";
 
-const COLOUR_P1 = "#01411C"; // pk-900 — flagship green
-const COLOUR_P2 = "#5d966a"; // pk-400 — secondary, distinct but harmonious
+const COLOUR_P1 = "#CCFF00"; // accent — neon lime
+const COLOUR_P2 = "#004225"; // primary green
+const COLOUR_GRID = "#1A1A1A"; // elevated — barely visible against surface
+const TICK_FG = "#888888"; // fg-secondary
+const TICK_MUTED = "#444444"; // fg-muted
 
 export function ComparisonRadar({
   player1,
@@ -55,55 +61,77 @@ export function ComparisonRadar({
   const p2Name = player2.profile.name;
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-card">
-      <div className="mb-4 flex items-baseline justify-between">
-        <h3 className="text-lg font-semibold text-ink-900">
+    <div className="flex h-full flex-col border border-line bg-surface p-6">
+      <div className="mb-4 flex items-baseline justify-between gap-4">
+        <h3 className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
           {mode === "batting" ? "Batting profile" : "Bowling profile"}
         </h3>
-        <span className="text-xs text-ink-500">all metrics scaled 0–100</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          scaled 0–100
+        </span>
       </div>
-      <ResponsiveContainer width="100%" height={360}>
-        <RadarChart data={data} outerRadius="78%">
-          <PolarGrid stroke="#d4d8dc" />
-          <PolarAngleAxis
-            dataKey="dim"
-            tick={{ fill: "#3f4750", fontSize: 12 }}
-          />
-          <PolarRadiusAxis
-            angle={30}
-            domain={[0, 100]}
-            tick={{ fill: "#aab1b8", fontSize: 10 }}
-            tickCount={5}
-          />
-          <Radar
-            name={p1Name}
-            dataKey="player1"
-            stroke={COLOUR_P1}
-            fill={COLOUR_P1}
-            fillOpacity={0.35}
-            strokeWidth={2}
-          />
-          <Radar
-            name={p2Name}
-            dataKey="player2"
-            stroke={COLOUR_P2}
-            fill={COLOUR_P2}
-            fillOpacity={0.25}
-            strokeWidth={2}
-          />
-          <Tooltip
-            formatter={(v) =>
-              typeof v === "number" ? `${v.toFixed(1)} / 100` : `${v ?? "—"}`
-            }
-            contentStyle={{
-              borderRadius: 8,
-              border: "1px solid #d4d8dc",
-              fontSize: 12,
-            }}
-          />
-          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-        </RadarChart>
-      </ResponsiveContainer>
+      <div className="flex-1">
+        <ResponsiveContainer width="100%" height={360}>
+          <RadarChart data={data} outerRadius="78%">
+            <PolarGrid stroke={COLOUR_GRID} />
+            <PolarAngleAxis
+              dataKey="dim"
+              tick={{ fill: TICK_FG, fontSize: 11 }}
+            />
+            <PolarRadiusAxis
+              angle={30}
+              domain={[0, 100]}
+              tick={{ fill: TICK_MUTED, fontSize: 10 }}
+              tickCount={5}
+              stroke={COLOUR_GRID}
+            />
+            <Radar
+              name={p1Name}
+              dataKey="player1"
+              stroke={COLOUR_P1}
+              fill={COLOUR_P1}
+              fillOpacity={0.2}
+              strokeWidth={2}
+            />
+            <Radar
+              name={p2Name}
+              dataKey="player2"
+              stroke={COLOUR_P2}
+              fill={COLOUR_P2}
+              fillOpacity={0.5}
+              strokeWidth={2}
+            />
+            <Tooltip
+              formatter={(v) =>
+                typeof v === "number" ? `${v.toFixed(1)} / 100` : `${v ?? "—"}`
+              }
+              contentStyle={{
+                background: "#0A0A0A",
+                border: "1px solid #222222",
+                borderRadius: 2,
+                fontFamily:
+                  "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace",
+                fontSize: 11,
+                color: "#F0F0F0",
+              }}
+              itemStyle={{ color: "#F0F0F0" }}
+              labelStyle={{ color: "#888888" }}
+              cursor={{ stroke: "#444444", strokeWidth: 1 }}
+            />
+            <Legend
+              wrapperStyle={{
+                fontSize: 11,
+                paddingTop: 8,
+                color: "#888888",
+                fontFamily:
+                  "DM Sans, system-ui, -apple-system, sans-serif",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+              }}
+            />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

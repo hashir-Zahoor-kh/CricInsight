@@ -1,16 +1,9 @@
-/** Lightweight loading placeholder — preserves layout so the page
- *  doesn't reflow when data arrives. Uses Tailwind's `animate-pulse`
- *  on `bg-ink-200` blocks per the Phase 5.4 polish contract. */
+/** Shimmer skeleton primitives — base #111111, highlight #1A1A1A,
+ *  left-to-right sweep via the `.shimmer` utility in index.css. */
 export function Skeleton({ className = "" }: { className?: string }) {
-  return (
-    <div
-      className={`animate-pulse rounded-md bg-ink-200 ${className}`}
-      aria-hidden
-    />
-  );
+  return <div className={`shimmer ${className}`} aria-hidden />;
 }
 
-/** Page-level skeleton for full sections (loose layout). */
 export function PageSkeleton() {
   return (
     <div className="space-y-4">
@@ -27,77 +20,77 @@ export function PageSkeleton() {
 }
 
 // --------------------------------------------------------------------
-// Content-shaped skeletons. The shapes mirror the rendered components
-// closely enough that there's zero layout shift when real data arrives.
+// Content-shaped skeletons — shapes mirror actual Bento Grid rows.
 // --------------------------------------------------------------------
 
-/** Mirrors `PlayerProfileCard` — pk-900 hero card with name, country
- *  chip, and style badges. */
+/** Mirrors `PlayerProfileCard` — title block + country line + role chip. */
 export function ProfileCardSkeleton() {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-pk-900 p-6 shadow-card">
-      <div className="absolute right-0 top-0 h-1 w-full bg-pk-600" aria-hidden />
+    <div className="min-h-[140px] border border-line bg-surface p-6">
       <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <div className="h-3 w-20 animate-pulse rounded bg-pk-700" />
-          <div className="h-7 w-48 animate-pulse rounded bg-pk-700" />
-          <div className="h-4 w-24 animate-pulse rounded bg-pk-800" />
+        <div className="space-y-3">
+          <div className="shimmer h-10 w-64" />
+          <div className="shimmer h-3 w-24 opacity-70" />
         </div>
-        <div className="h-8 w-8 animate-pulse rounded-full bg-pk-700" />
-      </div>
-      <div className="mt-5 flex gap-2">
-        <div className="h-5 w-28 animate-pulse rounded-full bg-white/10" />
-        <div className="h-5 w-24 animate-pulse rounded-full bg-white/10" />
+        <div className="shimmer h-6 w-12" />
       </div>
     </div>
   );
 }
 
-/** Mirrors `ComparisonRadar` — header row + 360 px chart area. */
+/** Mirrors `ComparisonRadar` — header + concentric ring hint. */
 export function RadarSkeleton() {
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-card">
+    <div className="border border-line bg-surface p-6">
       <div className="mb-4 flex items-baseline justify-between">
-        <div className="h-5 w-40 animate-pulse rounded bg-ink-200" />
-        <div className="h-3 w-24 animate-pulse rounded bg-ink-100" />
+        <div className="shimmer h-3 w-32" />
+        <div className="shimmer h-3 w-20 opacity-70" />
       </div>
       <div className="flex h-[360px] items-center justify-center">
         <div className="relative h-[260px] w-[260px]">
-          {/* Concentric pulse rings hint at the radar shape so the
-              skeleton reads as "chart loading", not "blank circle". */}
-          <div className="absolute inset-0 animate-pulse rounded-full bg-ink-100" />
-          <div className="absolute inset-6 animate-pulse rounded-full bg-ink-200/70" />
-          <div className="absolute inset-14 animate-pulse rounded-full bg-ink-200" />
+          <div className="shimmer absolute inset-0 rounded-full opacity-60" />
+          <div className="shimmer absolute inset-6 rounded-full opacity-40" />
+          <div className="shimmer absolute inset-14 rounded-full opacity-25" />
         </div>
       </div>
     </div>
   );
 }
 
-/** Mirrors the side-by-side stat table on the comparison page —
- *  header row + 6 stat rows. */
+/** Mirrors the career stat-table on `PlayerPage`. */
 export function StatTableSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-card">
-      <div className="mb-2 space-y-1.5">
-        <div className="h-4 w-32 animate-pulse rounded bg-ink-200" />
-        <div className="h-3 w-56 animate-pulse rounded bg-ink-100" />
+    <div className="border border-line bg-surface p-6">
+      <div className="mb-3 space-y-1.5">
+        <div className="shimmer h-4 w-32" />
+        <div className="shimmer h-3 w-56 opacity-70" />
       </div>
-      <div className="grid grid-cols-3 gap-3 border-b border-ink-200 pb-2">
-        <div className="h-3 w-12 animate-pulse rounded bg-ink-100" />
-        <div className="h-3 w-20 ml-auto animate-pulse rounded bg-ink-100" />
-        <div className="h-3 w-20 ml-auto animate-pulse rounded bg-ink-100" />
+      <div className="grid grid-cols-3 gap-3 border-b border-line pb-2">
+        <div className="shimmer h-3 w-12 opacity-70" />
+        <div className="shimmer ml-auto h-3 w-20 opacity-70" />
+        <div className="shimmer ml-auto h-3 w-20 opacity-70" />
       </div>
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="grid grid-cols-3 items-center gap-3 border-b border-ink-100 py-3 last:border-b-0"
+          className="grid grid-cols-3 items-center gap-3 border-b border-line py-3 last:border-b-0"
         >
-          <div className="h-4 w-24 animate-pulse rounded bg-ink-200" />
-          <div className="h-5 w-16 ml-auto animate-pulse rounded bg-ink-200" />
-          <div className="h-5 w-16 ml-auto animate-pulse rounded bg-ink-200" />
+          <div className="shimmer h-4 w-24" />
+          <div className="shimmer ml-auto h-5 w-16" />
+          <div className="shimmer ml-auto h-5 w-16" />
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Mirrors the narrow `KeyStatCard` — label, big number, name. */
+export function KeyStatSkeleton() {
+  return (
+    <div className="flex min-h-[260px] flex-col justify-between border border-line bg-surface p-6">
+      <div className="shimmer h-3 w-16" />
+      <div className="shimmer h-12 w-24" />
+      <div className="shimmer h-3 w-20 opacity-70" />
     </div>
   );
 }
@@ -105,12 +98,37 @@ export function StatTableSkeleton({ rows = 6 }: { rows?: number }) {
 /** Mirrors `FormSparkline` — header + chart strip. */
 export function SparklineSkeleton() {
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-card">
+    <div className="border border-line bg-surface p-6">
       <div className="flex items-baseline justify-between">
-        <div className="h-3 w-40 animate-pulse rounded bg-ink-200" />
-        <div className="h-3 w-12 animate-pulse rounded bg-ink-100" />
+        <div className="shimmer h-3 w-40" />
+        <div className="shimmer h-3 w-12 opacity-70" />
       </div>
-      <div className="mt-4 h-[140px] animate-pulse rounded-md bg-ink-100" />
+      <div className="shimmer mt-4 h-[120px] opacity-40" />
+    </div>
+  );
+}
+
+/** Mirrors the common-opponents table — header + N zebra rows. */
+export function OpponentsTableSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="border border-line bg-surface">
+      <div className="border-b border-line p-6">
+        <div className="shimmer h-3 w-48" />
+      </div>
+      <div>
+        {Array.from({ length: rows }).map((_, i) => (
+          <div
+            key={i}
+            className={`grid grid-cols-3 gap-4 px-6 py-3 ${
+              i % 2 === 0 ? "bg-surface" : "bg-canvas"
+            }`}
+          >
+            <div className="shimmer h-3 w-20" />
+            <div className="shimmer ml-auto h-3 w-16" />
+            <div className="shimmer ml-auto h-3 w-16" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

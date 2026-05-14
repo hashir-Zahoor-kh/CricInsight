@@ -1,99 +1,53 @@
-import { Globe, ShieldCheck, Trophy } from "lucide-react";
-
-import type { PlayerProfileCard as ProfileCardType } from "../api/types";
-
-const ROLE_LABEL: Record<string, string> = {
-  batsman: "Batsman",
-  bowler: "Bowler",
-  allrounder: "All-rounder",
-  wicketkeeper: "Wicketkeeper",
-};
+import type { PlayerProfileCard as ProfileCardType, PlayerRole } from "../api/types";
 
 /**
- * Big profile card used at the top of each comparison slot.
- * Lead colour is `pk-900` so the two cards sit visually above the
- * lighter content below them — the page reads top-down: who → stats.
+ * Row-1 header card for the Bento Grid. Identity-only — no inline
+ * stats. Layout:
+ *   ┌───────────────────────────────────────────────────────┐
+ *   │ NAME (Bebas Neue 48px)                       BAT/BOWL │
+ *   │ COUNTRY (DM Sans uppercase, secondary)                │
+ *   │                                                       │
+ *   │ #-- T20I  ← TODO Feature 4 (ICC ranking pill)         │
+ *   └───────────────────────────────────────────────────────┘
  */
+const ROLE_BADGE: Record<PlayerRole, string> = {
+  batsman: "BAT",
+  bowler: "BOWL",
+  allrounder: "ALL",
+  wicketkeeper: "WK",
+};
+
 export function PlayerProfileCard({
   profile,
-  accent = "primary",
 }: {
   profile: ProfileCardType;
-  accent?: "primary" | "secondary";
 }) {
   return (
-    <div
-      className={`relative overflow-hidden rounded-2xl shadow-card ${
-        accent === "primary" ? "bg-pk-900 text-white" : "bg-white text-ink-900"
-      }`}
-    >
-      {/* Decorative corner stripe — subtle nod to the flag without
-          getting kitsch. */}
-      <div
-        className={`absolute right-0 top-0 h-1 w-full ${
-          accent === "primary" ? "bg-pk-600" : "bg-pk-900"
-        }`}
-        aria-hidden
-      />
-      <div className="p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <div
-              className={`text-xs font-medium uppercase tracking-wider ${
-                accent === "primary" ? "text-pk-200" : "text-ink-500"
-              }`}
-            >
-              {ROLE_LABEL[profile.primary_role] ?? profile.primary_role}
-            </div>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-              {profile.name}
-            </h2>
-            {profile.country != null && (
-              <div
-                className={`mt-2 flex items-center gap-1.5 text-sm ${
-                  accent === "primary" ? "text-pk-100" : "text-ink-600"
-                }`}
-              >
-                <Globe className="h-3.5 w-3.5" aria-hidden />
-                {profile.country}
-              </div>
-            )}
-          </div>
-          <Trophy
-            className={`h-8 w-8 ${
-              accent === "primary" ? "text-pk-300" : "text-pk-700"
-            }`}
-            aria-hidden
-          />
-        </div>
-
-        <div
-          className={`mt-5 flex flex-wrap gap-2 text-xs ${
-            accent === "primary" ? "text-pk-100" : "text-ink-600"
-          }`}
-        >
-          {profile.batting_style != null && (
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${
-                accent === "primary" ? "bg-white/10" : "bg-pk-50 text-pk-900"
-              }`}
-            >
-              <ShieldCheck className="h-3 w-3" aria-hidden />
-              {profile.batting_style}
-            </span>
-          )}
-          {profile.bowling_style != null && (
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${
-                accent === "primary" ? "bg-white/10" : "bg-pk-50 text-pk-900"
-              }`}
-            >
-              <ShieldCheck className="h-3 w-3" aria-hidden />
-              {profile.bowling_style}
-            </span>
-          )}
-        </div>
+    <div className="relative flex min-h-[140px] flex-col border border-line bg-surface p-6 transition-colors duration-150 hover:border-[#333333]">
+      <div className="flex items-start justify-between gap-4">
+        <h2 className="font-display text-[48px] uppercase leading-none tracking-tight text-fg">
+          {profile.name}
+        </h2>
+        <span className="flex-shrink-0 border border-line px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-fg-secondary">
+          {ROLE_BADGE[profile.primary_role] ?? "—"}
+        </span>
       </div>
+
+      {profile.country != null && (
+        <div className="mt-3 font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
+          {profile.country}
+        </div>
+      )}
+
+      {/* TODO Feature 4: ICC ranking badge — neon-lime pill, bottom-left.
+          Once src/data/icc_rankings.json exists, render something like:
+            <span className="border border-accent px-2 py-0.5 font-mono
+                             text-[11px] uppercase tracking-widest text-accent">
+              #{rank} {format}
+            </span>
+          For now the slot is reserved so the card height matches the
+          eventual layout. */}
+      <div className="mt-auto pt-6" aria-hidden />
     </div>
   );
 }

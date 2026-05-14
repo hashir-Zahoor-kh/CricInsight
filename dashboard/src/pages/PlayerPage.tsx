@@ -6,27 +6,33 @@ import { DataQualityNotice } from "../components/DataQualityNotice";
 import { EmptyState } from "../components/EmptyState";
 import { FormSparkline } from "../components/FormSparkline";
 import {
+  KeyStatSkeleton,
   ProfileCardSkeleton,
   Skeleton,
   SparklineSkeleton,
   StatTableSkeleton,
 } from "../components/LoadingSkeleton";
 import { PlayerProfileCard } from "../components/PlayerProfileCard";
-import {
-  usePlayer,
-  usePlayerAverage,
-  usePlayerForm,
-} from "../hooks/useApi";
+import { usePlayer, usePlayerAverage, usePlayerForm } from "../hooks/useApi";
+import type {
+  BattingCareerStats,
+  BowlingCareerStats,
+  FormatBreakdown,
+  FormGuideEntry,
+  PlayerProfileCard as ProfileCardType,
+} from "../api/types";
 import { MatchType } from "../api/types";
 
 /**
- * Single-player deep-dive — supporting page for the comparison flow.
+ * Single-player deep-dive — dark PSL broadcast aesthetic.
  *
- * Sections:
- *   - profile card
- *   - format selector (T20I / ODI / Test / T20)
- *   - by-format career averages (table)
- *   - last-10 form sparkline for selected format
+ * Sections (top to bottom):
+ *   - Back link + player name (Bebas Neue 64px)
+ *   - ProfileCard (identity, role badge)
+ *   - Format pills (T20I / ODI / Test / T20 franchise)
+ *   - HeroStat — ONE neon-lime 64px number for selected format
+ *   - By-format career table — JetBrains Mono, no second accent colour
+ *   - Form sparkline (last 10 innings, animated pathLength)
  */
 export function PlayerPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,32 +45,37 @@ export function PlayerPage() {
 
   if (playerQuery.isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
+      <div className="mx-auto w-full max-w-[1440px] space-y-6 px-12 py-10">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-14 w-80" />
         <ProfileCardSkeleton />
-        <Skeleton className="h-12" />
+        <div className="flex gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-8 w-16" />
+          ))}
+        </div>
+        <KeyStatSkeleton />
         <StatTableSkeleton rows={4} />
         <SparklineSkeleton />
       </div>
     );
   }
+
   if (playerQuery.isError || playerQuery.data == null) {
     return (
       <EmptyState
         title="Player not found"
         description={
-          <>
-            <Link to="/" className="text-pk-700 underline">
-              Back to home
-            </Link>
-          </>
+          <Link to="/" className="text-accent underline">
+            Back to home
+          </Link>
         }
       />
     );
   }
 
   const player = playerQuery.data;
-  const profile = averageQuery.data?.profile ?? {
+  const profile: ProfileCardType = averageQuery.data?.profile ?? {
     id: player.id,
     external_id: player.external_id,
     name: player.name,
@@ -76,27 +87,33 @@ export function PlayerPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[1440px] space-y-6 px-12 py-10">
+      {/* Back + heading */}
       <div>
         <Link
           to="/"
-          className="inline-flex items-center gap-1 text-sm text-pk-700 hover:underline"
+          className="inline-flex items-center gap-1 font-sans text-[11px] uppercase tracking-widest text-fg-secondary transition-colors hover:text-accent"
         >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Home
+          <ArrowLeft className="h-3 w-3" aria-hidden /> Home
         </Link>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink-900">
-          Player Profile
+        <h1 className="mt-4 font-display text-[64px] uppercase leading-none tracking-tight text-fg">
+          {player.name}
         </h1>
-        <p className="text-ink-600">{player.name}</p>
       </div>
 
-      <PlayerProfileCard profile={profile} accent="primary" />
+      <PlayerProfileCard profile={profile} />
 
       {averageQuery.data && (
         <DataQualityNotice warnings={averageQuery.data.data_quality} />
       )}
 
-      <FormatTabs value={fmt} onChange={setFmt} />
+      <FormatPills value={fmt} onChange={setFmt} />
+
+      <HeroStat
+        loading={averageQuery.isLoading}
+        breakdowns={averageQuery.data?.by_format ?? []}
+        fmt={fmt}
+      />
 
       <ByFormatTable
         loading={averageQuery.isLoading}
@@ -112,9 +129,11 @@ export function PlayerPage() {
   );
 }
 
-// --------------------------------------------------------------------
+// ====================================================================
+// Format pills — border-based, matches ComparisonPage style
+// ====================================================================
 
-function FormatTabs({
+function FormatPills({
   value,
   onChange,
 }: {
@@ -125,95 +144,129 @@ function FormatTabs({
     { value: MatchType.T20I, label: "T20I" },
     { value: MatchType.ODI, label: "ODI" },
     { value: MatchType.TEST, label: "Test" },
-    { value: MatchType.T20, label: "T20 (franchise)" },
+    { value: MatchType.T20, label: "T20 franchise" },
   ];
   return (
-    <div className="flex gap-1 rounded-xl bg-white p-1 shadow-card">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          onClick={() => onChange(o.value)}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-            o.value === value
-              ? "bg-pk-900 text-white"
-              : "text-ink-700 hover:bg-ink-50"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
+    <div className="flex flex-wrap gap-2">
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={`border px-3 py-1.5 font-sans text-xs uppercase tracking-widest transition-colors ${
+              active
+                ? "border-accent text-accent"
+                : "border-line text-fg-muted hover:border-fg-muted hover:text-fg"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
+
+// ====================================================================
+// HeroStat — THE single neon-lime number for the selected format
+// ====================================================================
+
+function HeroStat({
+  loading,
+  breakdowns,
+  fmt,
+}: {
+  loading: boolean;
+  breakdowns: FormatBreakdown[];
+  fmt: MatchType;
+}) {
+  if (loading) return <KeyStatSkeleton />;
+
+  const row = breakdowns.find((b) => b.format === fmt);
+  const hasBatting = row?.batting != null;
+  const value = hasBatting
+    ? row!.batting!.average
+    : (row?.bowling?.wickets ?? null);
+  const label = hasBatting ? "Batting avg" : row?.bowling ? "Wickets" : "Stat";
+  const formatted =
+    value == null
+      ? "—"
+      : hasBatting
+        ? value.toFixed(2)
+        : value.toString();
+
+  return (
+    <div className="flex min-h-[160px] flex-col justify-between border border-line bg-surface p-6 transition-colors duration-150 hover:border-[#333333]">
+      <div className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
+        {label} · {fmt}
+      </div>
+      <div className="font-mono text-[64px] leading-none tabular-nums text-accent">
+        {formatted}
+      </div>
+    </div>
+  );
+}
+
+// ====================================================================
+// By-format career table
+// ====================================================================
 
 function ByFormatTable({
   loading,
   breakdowns,
 }: {
   loading: boolean;
-  breakdowns: { format: string; batting: any; bowling: any }[];
+  breakdowns: FormatBreakdown[];
 }) {
-  if (loading) {
-    return <StatTableSkeleton rows={4} />;
-  }
+  if (loading) return <StatTableSkeleton rows={4} />;
+
   if (breakdowns.length === 0) {
     return (
-      <div className="rounded-2xl bg-white p-6 shadow-card">
-        <h3 className="text-base font-semibold text-ink-900">
-          By-format breakdown
+      <div className="border border-line bg-surface p-6">
+        <h3 className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
+          Career averages by format
         </h3>
-        <p className="mt-3 rounded-md bg-ink-50 px-3 py-6 text-center text-sm text-ink-500">
-          No format stats yet — run the seed script to populate.
+        <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-widest text-fg-muted">
+          No stats yet — run the seed script.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-card">
-      <h3 className="text-base font-semibold text-ink-900">
-        Career averages by format
-      </h3>
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-ink-200 text-xs font-medium uppercase tracking-wider text-ink-500">
-            <tr>
-              <th className="py-2 text-left">Format</th>
-              <th className="py-2 text-right">Innings</th>
-              <th className="py-2 text-right">Runs</th>
-              <th className="py-2 text-right">Avg</th>
-              <th className="py-2 text-right">SR</th>
-              <th className="py-2 text-right">Wkts</th>
-              <th className="py-2 text-right">Eco</th>
+    <div className="border border-line bg-surface transition-colors duration-150 hover:border-[#333333]">
+      <div className="border-b border-line p-6">
+        <h3 className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
+          Career averages by format
+        </h3>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-line">
+              {["Format", "Inn", "Runs", "Avg", "SR", "Wkts", "Eco"].map(
+                (h, i) => (
+                  <th
+                    key={h}
+                    className={`px-6 py-3 font-sans text-[10px] uppercase tracking-widest text-fg-secondary ${
+                      i === 0 ? "text-left" : "text-right"
+                    }`}
+                  >
+                    {h}
+                  </th>
+                )
+              )}
             </tr>
           </thead>
           <tbody>
-            {breakdowns.map((row) => (
-              <tr
+            {breakdowns.map((row, i) => (
+              <FormatRow
                 key={row.format}
-                className="border-b border-ink-100 last:border-b-0"
-              >
-                <td className="py-3 font-medium text-ink-800">{row.format}</td>
-                <td className="py-3 text-right tabular-nums text-ink-700">
-                  {row.batting?.innings ?? row.bowling?.innings ?? "—"}
-                </td>
-                <td className="py-3 text-right tabular-nums text-ink-700">
-                  {row.batting?.runs ?? "—"}
-                </td>
-                <td className="py-3 text-right tabular-nums text-ink-700">
-                  {row.batting?.average?.toFixed(2) ?? "—"}
-                </td>
-                <td className="py-3 text-right tabular-nums text-ink-700">
-                  {row.batting?.strike_rate?.toFixed(2) ?? "—"}
-                </td>
-                <td className="py-3 text-right tabular-nums text-ink-700">
-                  {row.bowling?.wickets ?? "—"}
-                </td>
-                <td className="py-3 text-right tabular-nums text-ink-700">
-                  {row.bowling?.economy?.toFixed(2) ?? "—"}
-                </td>
-              </tr>
+                row={row}
+                zebra={i % 2 === 0 ? "surface" : "canvas"}
+              />
             ))}
           </tbody>
         </table>
@@ -222,21 +275,64 @@ function ByFormatTable({
   );
 }
 
+function FormatRow({
+  row,
+  zebra,
+}: {
+  row: FormatBreakdown;
+  zebra: "surface" | "canvas";
+}) {
+  const bat: BattingCareerStats | null = row.batting;
+  const bowl: BowlingCareerStats | null = row.bowling;
+  const bg = zebra === "surface" ? "bg-surface" : "bg-canvas";
+
+  return (
+    <tr
+      className={`border-b border-line/60 last:border-b-0 ${bg} font-mono text-sm`}
+    >
+      <td className="px-6 py-3 font-sans text-sm text-fg">{row.format}</td>
+      <td className="px-6 py-3 text-right tabular-nums text-fg">
+        {bat?.innings ?? bowl?.innings ?? "—"}
+      </td>
+      <td className="px-6 py-3 text-right tabular-nums text-fg">
+        {bat?.runs ?? "—"}
+      </td>
+      <td className="px-6 py-3 text-right tabular-nums text-fg">
+        {bat?.average != null ? bat.average.toFixed(2) : "—"}
+      </td>
+      <td className="px-6 py-3 text-right tabular-nums text-fg">
+        {bat?.strike_rate != null ? bat.strike_rate.toFixed(2) : "—"}
+      </td>
+      <td className="px-6 py-3 text-right tabular-nums text-fg">
+        {bowl?.wickets ?? "—"}
+      </td>
+      <td className="px-6 py-3 text-right tabular-nums text-fg">
+        {bowl?.economy != null ? bowl.economy.toFixed(2) : "—"}
+      </td>
+    </tr>
+  );
+}
+
+// ====================================================================
+// Form sparkline section
+// ====================================================================
+
 function FormSection({
   loading,
   entries,
   profile,
 }: {
   loading: boolean;
-  entries: import("../api/types").FormGuideEntry[];
-  profile: import("../api/types").PlayerProfileCard;
+  entries: FormGuideEntry[];
+  profile: ProfileCardType;
 }) {
   if (loading) return <SparklineSkeleton />;
   return (
     <FormSparkline
       entries={entries}
       profile={profile}
-      accentColor="#01411C"
+      accentColor="#CCFF00"
+      delay={0}
     />
   );
 }

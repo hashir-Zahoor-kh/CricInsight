@@ -1,35 +1,39 @@
-import { useEffect } from "react";
-import { ArrowRightLeft, Users } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
 
 import { ComparisonRadar } from "../components/ComparisonRadar";
 import { DataQualityNotice } from "../components/DataQualityNotice";
 import { FormSparkline } from "../components/FormSparkline";
 import {
+  KeyStatSkeleton,
+  OpponentsTableSkeleton,
   ProfileCardSkeleton,
   RadarSkeleton,
   SparklineSkeleton,
-  StatTableSkeleton,
 } from "../components/LoadingSkeleton";
 import { PlayerProfileCard } from "../components/PlayerProfileCard";
 import { PlayerSearchPicker } from "../components/PlayerSearchPicker";
-import { CompareStatRow } from "../components/StatCard";
 import { useCompare } from "../hooks/useApi";
-import { MatchType, type PlayerComparisonSlot } from "../api/types";
+import {
+  MatchType,
+  type CommonOpponentBlock,
+  type ComparisonResponse,
+  type PlayerComparisonSlot,
+} from "../api/types";
 
 /**
- * THE flagship page. Reads `player1`, `player2`, `format` from the URL
- * (so links are shareable / bookmarkable) and falls back to dropdowns
- * when any parameter is missing.
+ * THE flagship page — Visual Redesign Bento Grid.
  *
- * Layout (top → bottom):
- *   1. Pickers row (player1 / player2 / format)
- *   2. Two profile cards side-by-side
- *   3. Data-quality warnings (if any)
- *   4. Radar chart — batting OR bowling depending on shared role
- *   5. Side-by-side stat row (career averages, milestones)
- *   6. Two form sparklines side by side
- *   7. Common opponents table
+ * URL state (`p1`, `p2`, `fmt`) drives the layout so links remain
+ * shareable. A thin pickers row at the top lets the user swap either
+ * slot in-page without going back to /. Below that, four content
+ * rows:
+ *
+ *   Row 1 — two profile header cards (full-width grid)
+ *   Row 2 — narrow key-stat │ wide radar │ narrow key-stat
+ *   Row 3 — two animated form sparklines (P1: lime, P2: green)
+ *   Row 4 — common-opponents table, dense monospace
  */
 export function ComparisonPage() {
   const [params, setParams] = useSearchParams();
@@ -40,8 +44,6 @@ export function ComparisonPage() {
 
   const compareQuery = useCompare(player1Id, player2Id, formatParam);
 
-  // Default the format the first time the page mounts so the user
-  // doesn't have to pick T20I before any chart renders.
   useEffect(() => {
     if (formatParam == null) {
       const next = new URLSearchParams(params);
@@ -58,41 +60,39 @@ export function ComparisonPage() {
     setParams(next, { replace: true });
   };
 
-  return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-3xl font-semibold tracking-tight text-ink-900">
-          Player Comparison
-        </h1>
-        <p className="text-ink-600">
-          Side-by-side career stats, form, and head-to-head insight.
-        </p>
-      </header>
+  const hasSelection =
+    player1Id != null && player2Id != null && formatParam != null;
 
+  return (
+    <div className="mx-auto w-full max-w-[1440px] px-12 py-10">
       <PickersRow
         player1Id={player1Id}
         player2Id={player2Id}
         format={formatParam}
-        onPlayer1Change={(id) => updateParam("p1", id == null ? null : String(id))}
-        onPlayer2Change={(id) => updateParam("p2", id == null ? null : String(id))}
+        onPlayer1Change={(id) =>
+          updateParam("p1", id == null ? null : String(id))
+        }
+        onPlayer2Change={(id) =>
+          updateParam("p2", id == null ? null : String(id))
+        }
         onFormatChange={(fmt) => updateParam("fmt", fmt)}
       />
 
-      <Body
-        // playersEmpty no longer needed — the search picker shows
-        // its own "no players match" message inside the dropdown.
-        loading={compareQuery.isLoading || compareQuery.isFetching}
-        error={compareQuery.error}
-        data={compareQuery.data}
-        hasSelection={
-          player1Id != null && player2Id != null && formatParam != null
-        }
-      />
+      <div className="mt-8">
+        <Body
+          loading={compareQuery.isLoading || compareQuery.isFetching}
+          error={compareQuery.error}
+          data={compareQuery.data}
+          hasSelection={hasSelection}
+        />
+      </div>
     </div>
   );
 }
 
-// --------------------------------------------------------------------
+// ====================================================================
+// Pickers row
+// ====================================================================
 
 function PickersRow({
   player1Id,
@@ -110,54 +110,67 @@ function PickersRow({
   onFormatChange: (fmt: MatchType) => void;
 }) {
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
+    <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-6 border border-line bg-surface p-5">
       <PlayerSearchPicker
         label="Player 1"
         value={player1Id}
         onChange={onPlayer1Change}
         excludeId={player2Id}
       />
-      <div className="pb-2 flex items-center justify-center">
-        <ArrowRightLeft className="h-5 w-5 text-pk-700" aria-hidden />
-      </div>
       <PlayerSearchPicker
         label="Player 2"
         value={player2Id}
         onChange={onPlayer2Change}
         excludeId={player1Id}
       />
-      <FormatSelect value={format} onChange={onFormatChange} />
+      <FormatPills value={format} onChange={onFormatChange} />
     </div>
   );
 }
 
-function FormatSelect({
+function FormatPills({
   value,
   onChange,
 }: {
   value: MatchType | null;
   onChange: (fmt: MatchType) => void;
 }) {
+  const options: { value: MatchType; label: string }[] = [
+    { value: MatchType.T20I, label: "T20I" },
+    { value: MatchType.ODI, label: "ODI" },
+    { value: MatchType.TEST, label: "Test" },
+  ];
   return (
     <div>
-      <label className="block text-xs font-medium uppercase tracking-wider text-ink-500">
+      <div className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
         Format
-      </label>
-      <select
-        className="mt-1 w-full rounded-md border border-ink-200 bg-white px-3 py-2 text-sm text-ink-800 focus:border-pk-600 focus:outline-none focus:ring-1 focus:ring-pk-600"
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value as MatchType)}
-      >
-        <option value={MatchType.T20I}>T20I</option>
-        <option value={MatchType.ODI}>ODI</option>
-        <option value={MatchType.TEST}>Test</option>
-        <option value={MatchType.T20}>T20 (franchise)</option>
-      </select>
+      </div>
+      <div className="mt-2 flex gap-2">
+        {options.map((o) => {
+          const isSelected = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => onChange(o.value)}
+              className={`border px-3 py-1.5 font-sans text-xs uppercase tracking-widest transition-colors ${
+                isSelected
+                  ? "border-accent text-accent"
+                  : "border-line text-fg-muted hover:border-fg-muted hover:text-fg"
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// --------------------------------------------------------------------
+// ====================================================================
+// Body — empty / loading / error / resolved
+// ====================================================================
 
 function Body({
   loading,
@@ -167,17 +180,19 @@ function Body({
 }: {
   loading: boolean;
   error: unknown;
-  data: ReturnType<typeof useCompare>["data"];
+  data: ComparisonResponse | undefined;
   hasSelection: boolean;
 }) {
   if (!hasSelection) {
     return (
-      <div className="rounded-2xl bg-white p-10 text-center shadow-card">
-        <Users className="mx-auto h-8 w-8 text-pk-700" aria-hidden />
-        <h3 className="mt-3 text-lg font-semibold text-ink-900">
+      <div className="border border-line bg-surface px-10 py-16 text-center">
+        <p className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
+          Awaiting selection
+        </p>
+        <h3 className="mt-3 font-display text-3xl uppercase tracking-tight text-fg">
           Pick two players and a format
         </h3>
-        <p className="mt-1 text-sm text-ink-600">
+        <p className="mx-auto mt-3 max-w-md font-sans text-sm text-fg-muted">
           Choose any two players from the seeded roster and a match format
           to see the side-by-side comparison.
         </p>
@@ -185,307 +200,291 @@ function Body({
     );
   }
   if (loading) {
-    // Content-shaped skeletons — same dimensions and rough layout as
-    // the resolved view so when data lands there is zero reflow.
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
-          <ProfileCardSkeleton />
-          <ProfileCardSkeleton />
-        </div>
-        <RadarSkeleton />
-        <StatTableSkeleton rows={7} />
-        <div className="grid grid-cols-2 gap-4">
-          <SparklineSkeleton />
-          <SparklineSkeleton />
-        </div>
-      </div>
-    );
+    return <BentoSkeleton />;
   }
   if (error != null) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800">
-        Couldn't load comparison —{" "}
-        {error instanceof Error ? error.message : "unknown error"}
+      <div className="border border-red-500/50 bg-red-500/[0.05] p-6 font-sans text-sm text-red-300">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-red-300">
+          Couldn't load comparison
+        </p>
+        <p className="mt-2 text-red-200/80">
+          {error instanceof Error ? error.message : "unknown error"}
+        </p>
       </div>
     );
   }
   if (data == null) return null;
 
-  const radarMode = decideRadarMode(data.player1, data.player2);
+  return <BentoGrid data={data} />;
+}
 
+// ====================================================================
+// Bento Grid — staggered entrance animations per row
+// ====================================================================
+
+const SLIDE_UP = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0 },
+} as const;
+
+function BentoGrid({ data }: { data: ComparisonResponse }) {
+  const radarMode = decideRadarMode(data.player1, data.player2);
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4">
-        <PlayerProfileCard profile={data.player1.profile} accent="primary" />
-        <PlayerProfileCard profile={data.player2.profile} accent="primary" />
-      </div>
-
       <DataQualityNotice warnings={data.data_quality} />
 
-      {radarMode != null ? (
-        <ComparisonRadar
-          player1={data.player1}
-          player2={data.player2}
-          mode={radarMode}
-        />
-      ) : (
-        <div className="rounded-2xl border border-dashed border-ink-200 bg-white p-6 text-sm text-ink-600">
-          Players have different primary roles — radar chart needs both to be
-          batters or both to be bowlers. Stat tables below show what they
-          have in common.
-        </div>
-      )}
+      {/* Row 1 — player headers */}
+      <motion.div
+        className="grid grid-cols-2 gap-6"
+        variants={SLIDE_UP}
+        initial="hidden"
+        animate="visible"
+        transition={{ duration: 0.4, delay: 0, ease: "easeOut" }}
+      >
+        <PlayerProfileCard profile={data.player1.profile} />
+        <PlayerProfileCard profile={data.player2.profile} />
+      </motion.div>
 
-      <StatComparison
-        slot1={data.player1}
-        slot2={data.player2}
-        radarMode={radarMode}
-      />
+      {/* Row 2 — stat / radar / stat */}
+      <motion.div
+        className="grid grid-cols-[1fr_3fr_1fr] gap-6"
+        variants={SLIDE_UP}
+        initial="hidden"
+        animate="visible"
+        transition={{ duration: 0.4, delay: 0.05, ease: "easeOut" }}
+      >
+        <KeyStatCard slot={data.player1} mode={radarMode} />
+        {radarMode != null ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
+          >
+            <ComparisonRadar
+              player1={data.player1}
+              player2={data.player2}
+              mode={radarMode}
+            />
+          </motion.div>
+        ) : (
+          <MixedRoleNotice />
+        )}
+        <KeyStatCard slot={data.player2} mode={radarMode} />
+      </motion.div>
 
-      <div className="grid grid-cols-2 gap-4">
+      {/* Row 3 — form sparklines */}
+      <motion.div
+        className="grid grid-cols-2 gap-6"
+        variants={SLIDE_UP}
+        initial="hidden"
+        animate="visible"
+        transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
+      >
         <FormSparkline
           entries={data.player1.form_guide}
           profile={data.player1.profile}
-          accentColor="#01411C"
+          accentColor="#CCFF00"
+          delay={0}
         />
         <FormSparkline
           entries={data.player2.form_guide}
           profile={data.player2.profile}
-          accentColor="#5d966a"
+          accentColor="#004225"
+          delay={0.3}
         />
+      </motion.div>
+
+      {/* Row 4 — common opponents */}
+      <motion.div
+        variants={SLIDE_UP}
+        initial="hidden"
+        animate="visible"
+        transition={{ duration: 0.4, delay: 0.15, ease: "easeOut" }}
+      >
+        <CommonOpponentsTable data={data} />
+      </motion.div>
+    </div>
+  );
+}
+
+function BentoSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-6">
+        <ProfileCardSkeleton />
+        <ProfileCardSkeleton />
       </div>
-
-      <CommonOpponentsTable data={data} />
+      <div className="grid grid-cols-[1fr_3fr_1fr] gap-6">
+        <KeyStatSkeleton />
+        <RadarSkeleton />
+        <KeyStatSkeleton />
+      </div>
+      <div className="grid grid-cols-2 gap-6">
+        <SparklineSkeleton />
+        <SparklineSkeleton />
+      </div>
+      <OpponentsTableSkeleton rows={4} />
     </div>
   );
 }
 
-// --------------------------------------------------------------------
+// ====================================================================
+// useCountUp — animates a number from 0 to target over `duration`s
+// ====================================================================
 
-function StatComparison({
-  slot1,
-  slot2,
-  radarMode,
+function useCountUp(target: number, duration = 0.8): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const start = performance.now();
+    let raf: number;
+
+    const step = (now: number) => {
+      const elapsed = (now - start) / 1000;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - (1 - progress) ** 2; // easeOut quadratic
+      setCount(progress < 1 ? target * eased : target);
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+
+  return count;
+}
+
+// ====================================================================
+// Row 2 — narrow key-stat card (the single neon-lime number per slot)
+// ====================================================================
+
+function KeyStatCard({
+  slot,
+  mode,
 }: {
-  slot1: PlayerComparisonSlot;
-  slot2: PlayerComparisonSlot;
-  radarMode: "batting" | "bowling" | null;
+  slot: PlayerComparisonSlot;
+  mode: "batting" | "bowling" | null;
 }) {
-  // Show whichever side(s) both players have data for. If radar is
-  // batting → batting stats; bowling → bowling; null (mixed) → both
-  // tables stacked.
-  const showBatting =
-    radarMode === "batting" ||
-    (radarMode == null && slot1.batting != null && slot2.batting != null);
-  const showBowling =
-    radarMode === "bowling" ||
-    (radarMode == null && slot1.bowling != null && slot2.bowling != null);
+  const effective: "batting" | "bowling" =
+    mode ??
+    (slot.batting != null
+      ? "batting"
+      : slot.bowling != null
+        ? "bowling"
+        : "batting");
+
+  let headlineValue: number | null = null;
+  let headlineDecimals = 2;
+  let label = "Average";
+
+  if (effective === "batting") {
+    label = "Batting average";
+    headlineValue = slot.batting?.average ?? null;
+    headlineDecimals = 2;
+  } else {
+    label = "Wickets";
+    headlineValue = slot.bowling?.wickets ?? null;
+    headlineDecimals = 0;
+  }
+
+  const animatedValue = useCountUp(headlineValue ?? 0);
+  const headline =
+    headlineValue == null
+      ? "—"
+      : headlineDecimals === 0
+        ? Math.round(animatedValue).toString()
+        : animatedValue.toFixed(headlineDecimals);
 
   return (
-    <div className="grid gap-4">
-      {showBatting && (
-        <div className="rounded-2xl bg-white p-6 shadow-card">
-          <SectionHeader
-            title="Batting career"
-            sub="career rollup, scoped to the selected format"
-          />
-          <div className="grid grid-cols-3 border-b border-ink-200 pb-2 text-xs font-medium uppercase tracking-wider text-ink-500">
-            <span>Stat</span>
-            <span className="text-right">{slot1.profile.name}</span>
-            <span className="text-right">{slot2.profile.name}</span>
-          </div>
-          <CompareStatRow
-            label="Innings"
-            player1={slot1.batting?.innings ?? null}
-            player2={slot2.batting?.innings ?? null}
-            format={(v) => v.toString()}
-          />
-          <CompareStatRow
-            label="Runs"
-            player1={slot1.batting?.runs ?? null}
-            player2={slot2.batting?.runs ?? null}
-            format={(v) => v.toString()}
-          />
-          <CompareStatRow
-            label="Average"
-            player1={slot1.batting?.average ?? null}
-            player2={slot2.batting?.average ?? null}
-            format={(v) => v.toFixed(2)}
-          />
-          <CompareStatRow
-            label="Strike rate"
-            player1={slot1.batting?.strike_rate ?? null}
-            player2={slot2.batting?.strike_rate ?? null}
-            format={(v) => v.toFixed(2)}
-          />
-          <CompareStatRow
-            label="50s"
-            player1={slot1.batting?.fifties ?? null}
-            player2={slot2.batting?.fifties ?? null}
-            format={(v) => v.toString()}
-          />
-          <CompareStatRow
-            label="100s"
-            player1={slot1.batting?.hundreds ?? null}
-            player2={slot2.batting?.hundreds ?? null}
-            format={(v) => v.toString()}
-          />
-          <CompareStatRow
-            label="Highest score"
-            player1={slot1.batting?.highest_score ?? null}
-            player2={slot2.batting?.highest_score ?? null}
-            format={(v) => v.toString()}
-          />
-        </div>
-      )}
-
-      {showBowling && (
-        <div className="rounded-2xl bg-white p-6 shadow-card">
-          <SectionHeader
-            title="Bowling career"
-            sub="career rollup, scoped to the selected format"
-          />
-          <div className="grid grid-cols-3 border-b border-ink-200 pb-2 text-xs font-medium uppercase tracking-wider text-ink-500">
-            <span>Stat</span>
-            <span className="text-right">{slot1.profile.name}</span>
-            <span className="text-right">{slot2.profile.name}</span>
-          </div>
-          <CompareStatRow
-            label="Innings"
-            player1={slot1.bowling?.innings ?? null}
-            player2={slot2.bowling?.innings ?? null}
-            format={(v) => v.toString()}
-          />
-          <CompareStatRow
-            label="Wickets"
-            player1={slot1.bowling?.wickets ?? null}
-            player2={slot2.bowling?.wickets ?? null}
-            format={(v) => v.toString()}
-          />
-          <CompareStatRow
-            label="Average"
-            player1={slot1.bowling?.average ?? null}
-            player2={slot2.bowling?.average ?? null}
-            format={(v) => v.toFixed(2)}
-            betterIsLower
-          />
-          <CompareStatRow
-            label="Economy"
-            player1={slot1.bowling?.economy ?? null}
-            player2={slot2.bowling?.economy ?? null}
-            format={(v) => v.toFixed(2)}
-            betterIsLower
-          />
-          <CompareStatRow
-            label="5-wicket hauls"
-            player1={slot1.bowling?.five_wicket_hauls ?? null}
-            player2={slot2.bowling?.five_wicket_hauls ?? null}
-            format={(v) => v.toString()}
-          />
-        </div>
-      )}
+    <div className="flex min-h-[260px] flex-col justify-between border border-line bg-surface p-6 transition-colors duration-150 hover:border-[#333333]">
+      <div className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
+        {label}
+      </div>
+      <div className="font-mono text-[64px] leading-none tabular-nums text-accent">
+        {headline}
+      </div>
+      <div className="truncate font-sans text-[11px] uppercase tracking-widest text-fg-muted">
+        {slot.profile.name}
+      </div>
     </div>
   );
 }
 
-function SectionHeader({ title, sub }: { title: string; sub: string }) {
+function MixedRoleNotice() {
   return (
-    <div className="mb-2">
-      <h3 className="text-base font-semibold text-ink-900">{title}</h3>
-      <p className="text-xs text-ink-500">{sub}</p>
+    <div className="flex items-center justify-center border border-dashed border-line bg-surface px-6 py-8 text-center transition-colors duration-150 hover:border-[#333333]">
+      <p className="font-sans text-sm text-fg-secondary">
+        Different primary roles — radar needs both players to share a
+        discipline. Common-opponents table below still applies.
+      </p>
     </div>
   );
 }
 
-// --------------------------------------------------------------------
+// ====================================================================
+// Row 4 — common opponents table
+// ====================================================================
 
-function CommonOpponentsTable({
-  data,
-}: {
-  data: NonNullable<ReturnType<typeof useCompare>["data"]>;
-}) {
-  const showBatting = data.common_opponents.some(
+function CommonOpponentsTable({ data }: { data: ComparisonResponse }) {
+  const opponents = data.common_opponents;
+
+  const battingMode = opponents.some(
     (o) =>
       o.player1_batting_average != null || o.player2_batting_average != null
   );
-  const showBowling = data.common_opponents.some(
-    (o) =>
-      o.player1_bowling_wickets != null || o.player2_bowling_wickets != null
-  );
+  const bowlingMode = !battingMode &&
+    opponents.some(
+      (o) =>
+        o.player1_bowling_wickets != null || o.player2_bowling_wickets != null
+    );
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-card">
-      <SectionHeader
-        title="Head-to-head with common opponents"
-        sub="opponents both players have faced in the selected format"
-      />
-      {data.common_opponents.length === 0 ? (
-        <p className="rounded-md bg-ink-50 px-3 py-6 text-center text-sm text-ink-500">
+    <div className="border border-line bg-surface transition-colors duration-150 hover:border-[#333333]">
+      <div className="border-b border-line p-6">
+        <h3 className="font-sans text-[11px] uppercase tracking-widest text-fg-secondary">
+          Head-to-head · common opponents
+        </h3>
+        <p className="mt-1 font-sans text-xs text-fg-muted">
+          Opponents both players have faced in the selected format.
+        </p>
+      </div>
+
+      {opponents.length === 0 ? (
+        <p className="px-6 py-10 text-center font-mono text-[11px] uppercase tracking-widest text-fg-muted">
           No common opponents in this format yet.
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b border-ink-200 text-xs font-medium uppercase tracking-wider text-ink-500">
-              <tr>
-                <th className="py-2 text-left">Opponent</th>
-                <th className="py-2 text-right">
-                  {data.player1.profile.name}
-                  {showBatting && (
-                    <div className="text-[10px] font-normal text-ink-400">
-                      avg / SR
-                    </div>
-                  )}
+          <table className="w-full font-mono text-sm">
+            <thead>
+              <tr className="border-b border-line">
+                <th className="px-6 py-3 text-left font-sans text-[10px] uppercase tracking-widest text-fg-secondary">
+                  Opponent
                 </th>
-                <th className="py-2 text-right">
+                <th className="px-6 py-3 text-right font-sans text-[10px] uppercase tracking-widest text-fg-secondary">
+                  {data.player1.profile.name}
+                  <div className="font-mono text-[10px] normal-case tracking-normal text-fg-muted">
+                    {battingMode ? "avg · sr" : "wkts · eco"}
+                  </div>
+                </th>
+                <th className="px-6 py-3 text-right font-sans text-[10px] uppercase tracking-widest text-fg-secondary">
                   {data.player2.profile.name}
-                  {showBatting && (
-                    <div className="text-[10px] font-normal text-ink-400">
-                      avg / SR
-                    </div>
-                  )}
+                  <div className="font-mono text-[10px] normal-case tracking-normal text-fg-muted">
+                    {battingMode ? "avg · sr" : "wkts · eco"}
+                  </div>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {data.common_opponents.map((row) => (
-                <tr
+              {opponents.map((row, i) => (
+                <OpponentRow
                   key={row.opponent}
-                  className="border-b border-ink-100 last:border-b-0"
-                >
-                  <td className="py-3 font-medium text-ink-800">
-                    {row.opponent}
-                  </td>
-                  <td className="py-3 text-right tabular-nums text-ink-700">
-                    {showBatting && (
-                      <div>
-                        {fmtOrDash(row.player1_batting_average, 2)} /{" "}
-                        {fmtOrDash(row.player1_batting_strike_rate, 2)}
-                      </div>
-                    )}
-                    {showBowling && (
-                      <div className="text-xs text-ink-500">
-                        {fmtOrDash(row.player1_bowling_wickets, 0)} wkts ·{" "}
-                        eco {fmtOrDash(row.player1_bowling_economy, 2)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3 text-right tabular-nums text-ink-700">
-                    {showBatting && (
-                      <div>
-                        {fmtOrDash(row.player2_batting_average, 2)} /{" "}
-                        {fmtOrDash(row.player2_batting_strike_rate, 2)}
-                      </div>
-                    )}
-                    {showBowling && (
-                      <div className="text-xs text-ink-500">
-                        {fmtOrDash(row.player2_bowling_wickets, 0)} wkts ·{" "}
-                        eco {fmtOrDash(row.player2_bowling_economy, 2)}
-                      </div>
-                    )}
-                  </td>
-                </tr>
+                  row={row}
+                  zebra={i % 2 === 0 ? "surface" : "canvas"}
+                  battingMode={battingMode}
+                  bowlingMode={bowlingMode}
+                />
               ))}
             </tbody>
           </table>
@@ -495,7 +494,113 @@ function CommonOpponentsTable({
   );
 }
 
-// --------------------------------------------------------------------
+function OpponentRow({
+  row,
+  zebra,
+  battingMode,
+  bowlingMode,
+}: {
+  row: CommonOpponentBlock;
+  zebra: "surface" | "canvas";
+  battingMode: boolean;
+  bowlingMode: boolean;
+}) {
+  let p1Better = false;
+  let p2Better = false;
+  if (battingMode) {
+    const a = row.player1_batting_average;
+    const b = row.player2_batting_average;
+    if (a != null && b != null && a !== b) {
+      p1Better = a > b;
+      p2Better = b > a;
+    }
+  } else if (bowlingMode) {
+    const a = row.player1_bowling_wickets;
+    const b = row.player2_bowling_wickets;
+    if (a != null && b != null && a !== b) {
+      p1Better = a > b;
+      p2Better = b > a;
+    }
+  }
+
+  const bg = zebra === "surface" ? "bg-surface" : "bg-canvas";
+
+  return (
+    <tr className={`border-b border-line/60 last:border-b-0 ${bg}`}>
+      <td className="px-6 py-3 font-sans text-sm text-fg">{row.opponent}</td>
+      <td className="px-6 py-3 text-right">
+        {battingMode ? (
+          <CellBatting
+            avg={row.player1_batting_average}
+            sr={row.player1_batting_strike_rate}
+            highlight={p1Better}
+          />
+        ) : (
+          <CellBowling
+            wkts={row.player1_bowling_wickets}
+            eco={row.player1_bowling_economy}
+            highlight={p1Better}
+          />
+        )}
+      </td>
+      <td className="px-6 py-3 text-right">
+        {battingMode ? (
+          <CellBatting
+            avg={row.player2_batting_average}
+            sr={row.player2_batting_strike_rate}
+            highlight={p2Better}
+          />
+        ) : (
+          <CellBowling
+            wkts={row.player2_bowling_wickets}
+            eco={row.player2_bowling_economy}
+            highlight={p2Better}
+          />
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function CellBatting({
+  avg,
+  sr,
+  highlight,
+}: {
+  avg: number | null;
+  sr: number | null;
+  highlight: boolean;
+}) {
+  const top = highlight ? "text-accent" : "text-fg";
+  return (
+    <div className="tabular-nums">
+      <div className={`text-sm ${top}`}>{fmtOrDash(avg, 2)}</div>
+      <div className="text-xs text-fg-muted">{fmtOrDash(sr, 2)} sr</div>
+    </div>
+  );
+}
+
+function CellBowling({
+  wkts,
+  eco,
+  highlight,
+}: {
+  wkts: number | null;
+  eco: number | null;
+  highlight: boolean;
+}) {
+  const top = highlight ? "text-accent" : "text-fg";
+  return (
+    <div className="tabular-nums">
+      <div className={`text-sm ${top}`}>{fmtOrDash(wkts, 0)} wkts</div>
+      <div className="text-xs text-fg-muted">{fmtOrDash(eco, 2)} eco</div>
+    </div>
+  );
+}
+
+// ====================================================================
+// helpers
+// ====================================================================
 
 function decideRadarMode(
   p1: PlayerComparisonSlot,
@@ -503,8 +608,6 @@ function decideRadarMode(
 ): "batting" | "bowling" | null {
   const battingBoth = p1.batting != null && p2.batting != null;
   const bowlingBoth = p1.bowling != null && p2.bowling != null;
-  // Prefer batting when both qualify — most users compare batters and
-  // it's the more recognisable chart shape.
   if (battingBoth) return "batting";
   if (bowlingBoth) return "bowling";
   return null;

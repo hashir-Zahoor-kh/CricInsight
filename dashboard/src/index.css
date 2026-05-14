@@ -1,27 +1,60 @@
+/* Design tokens (CSS variables) — single source of truth, imported
+   FIRST so every Tailwind layer below can reference them and so
+   raw CSS files can use var(--color-*) without extra wiring. */
+@import "./styles/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Force-light theme for now — the dashboard's PK green palette is
-   designed against white/off-white. A dark mode would need its own
-   token set (Phase 5.4 territory if/when we add it). */
+/* Visual Redesign — dark theme. tokens.css owns the values. */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 html,
 body,
 #root {
   min-height: 100vh;
-  background: theme("colors.pk.50");
-  color: theme("colors.ink.800");
+  background: var(--color-canvas);
+  color: var(--color-fg);
 }
 
-/* Body font stack defers to the Tailwind theme.fontFamily.sans the
-   moment Inter loads. */
+/* Body font stack resolves to DM Sans the moment Google Fonts
+   finishes loading; system stack covers the brief gap. */
 body {
-  font-family: theme("fontFamily.sans");
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  cursor: url('/cursor-bat.png') 8 8, auto;
+}
+
+a,
+button,
+input,
+[role='button'] {
+  cursor: url('/cursor-bat.png') 8 8, pointer;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@layer utilities {
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      #111111 25%,
+      #1a1a1a 50%,
+      #111111 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
 }
