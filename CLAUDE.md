@@ -59,9 +59,21 @@
 - Current theme: Pakistan green sidebar, basic Tailwind — NOT the final design
 - **Visual redesign NOT YET STARTED**
 
-### Deployment — NOT DONE
-- Plan: Railway (backend + PostgreSQL) + Vercel (frontend)
-- Config files not yet written
+### Deployment — LIVE
+- **Backend:** https://cricinsight-backend-irdx.onrender.com (Render, Docker runtime, python:3.12-slim)
+- **Frontend:** https://cric-insight-seven.vercel.app (Vercel, SPA rewrite via `dashboard/vercel.json`)
+- **Database:** Render PostgreSQL free tier (attached to the Render web service via `DATABASE_URL` env var)
+- **AWS:** ECR image registry (`802531653822.dkr.ecr.us-east-1.amazonaws.com/cricinsight-backend:latest`), S3 Cricsheet archives (`s3://cricinsight-data-802531653822`), CloudWatch logs (`/cricinsight/backend`)
+
+**To seed the production database**, override both DB URLs so the seed CLI bypasses the local `.env` file:
+```bash
+cd backend
+source .venv/bin/activate
+DATABASE_URL="postgresql+asyncpg://<user>:<pass>@<render-host>:5432/cricinsight" \
+DATABASE_URL_SYNC="postgresql+psycopg2://<user>:<pass>@<render-host>:5432/cricinsight" \
+python -m ingestion.seed_cricsheet
+```
+Use the **External Database URL** from the Render PostgreSQL dashboard (not the internal hostname, which is only reachable within Render's network).
 
 ---
 
@@ -172,15 +184,15 @@
 
 ---
 
-### AFTER FEATURES: Deployment
+### Deployment — DONE ✓
 
-**Stack:** Railway (FastAPI + PostgreSQL) + Vercel (React)
-**Files needed:**
-- `railway.toml` at project root
-- `vercel.json` in `dashboard/`
-- Update `backend/app/config.py` to read PORT from environment
-- Update CORS to allow Vercel deployment URL
-- README deployment section
+**Stack:** Render (Docker, FastAPI) + Render PostgreSQL + Vercel (React) + AWS ECR/S3/CloudWatch
+- `render.yaml` — Render web service (Docker runtime) + free-tier Postgres
+- `railway.toml` — kept for Railway fallback (not currently active)
+- `dashboard/vercel.json` — SPA rewrite rule
+- `backend/app/config.py` — `PORT`, `ALLOWED_ORIGINS`, AWS settings
+- `scripts/push_to_ecr.sh` — build + push to ECR
+- `scripts/upload_cricsheet_to_s3.py` — upload Cricsheet archives to S3
 
 ---
 
