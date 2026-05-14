@@ -1,0 +1,8 @@
+# Extra dependencies for the Cricsheet ingestion scripts.
+# Not needed by the FastAPI app or Render — install locally alongside
+# the main requirements when running seed_cricsheet.py:
+#
+#   pip install -r requirements.txt -r requirements-ingestion.txt
+
+# --- Data shaping (normalizer.py, seed_cricsheet.py) ---
+pandas==2.2.2
