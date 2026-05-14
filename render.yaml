@@ -1,15 +1,11 @@
 services:
   - type: web
     name: cricinsight-backend
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    rootDir: backend
-    plan: free
-    pythonVersion: "3.12.0"
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.0"
       - key: ENVIRONMENT
         value: production
       - key: CRICAPI_KEY
