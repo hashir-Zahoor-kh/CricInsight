@@ -345,3 +345,26 @@ export interface LiveScoreResponse {
   live_available: boolean;
   matches: LiveMatch[];
 }
+
+// ====================================================================
+// analytics.py — career timeline
+// ====================================================================
+
+/** Mirrors Pydantic `TimelineEntry`. Null fields = player didn't bat/bowl that year. */
+export interface TimelineEntry {
+  year: number;
+  matches: number;
+  runs: number | null;
+  batting_average: number | null;
+  batting_strike_rate: number | null;
+  wickets: number | null;
+  bowling_economy: number | null;
+  bowling_average: number | null;
+}
+
+/** Mirrors Pydantic `TimelineResponse`. */
+export interface TimelineResponse {
+  profile: PlayerProfileCard;
+  format: MatchType;
+  years: TimelineEntry[];
+}

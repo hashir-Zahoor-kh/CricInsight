@@ -31,6 +31,7 @@ import type {
   PlayerAverageResponse,
   PlayerResponse,
   PlayerWithStats,
+  TimelineResponse,
   VenueStatsResponse,
 } from "../api/types";
 
@@ -230,6 +231,21 @@ export function useHeadToHead(
       }),
     enabled:
       team1 != null && team2 != null && format != null && team1 !== team2,
+  });
+}
+
+export function usePlayerTimeline(
+  playerId: number | null,
+  format: MatchType | null
+): UseQueryResult<TimelineResponse> {
+  return useQuery<TimelineResponse>({
+    queryKey: ["player-timeline", playerId, format],
+    queryFn: () =>
+      getJson<TimelineResponse>(
+        `/api/v1/analytics/player/${playerId}/timeline`,
+        { format }
+      ),
+    enabled: playerId != null && format != null,
   });
 }
 

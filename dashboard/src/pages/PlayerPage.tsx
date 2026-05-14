@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
+import { CareerTimeline } from "../components/CareerTimeline";
 import { DataQualityNotice } from "../components/DataQualityNotice";
 import { EmptyState } from "../components/EmptyState";
 import { FormSparkline } from "../components/FormSparkline";
@@ -13,7 +14,7 @@ import {
   StatTableSkeleton,
 } from "../components/LoadingSkeleton";
 import { PlayerProfileCard } from "../components/PlayerProfileCard";
-import { usePlayer, usePlayerAverage, usePlayerForm } from "../hooks/useApi";
+import { usePlayer, usePlayerAverage, usePlayerForm, usePlayerTimeline } from "../hooks/useApi";
 import type {
   BattingCareerStats,
   BowlingCareerStats,
@@ -42,6 +43,7 @@ export function PlayerPage() {
   const playerQuery = usePlayer(playerId);
   const averageQuery = usePlayerAverage(playerId);
   const formQuery = usePlayerForm(playerId, fmt);
+  const timelineQuery = usePlayerTimeline(playerId, fmt);
 
   if (playerQuery.isLoading) {
     return (
@@ -125,6 +127,15 @@ export function PlayerPage() {
         entries={formQuery.data?.innings ?? []}
         profile={profile}
       />
+
+      {timelineQuery.isLoading ? (
+        <div className="border border-line bg-surface p-6">
+          <div className="shimmer h-2 w-40" />
+          <div className="shimmer mt-6 h-[220px] w-full opacity-60" />
+        </div>
+      ) : timelineQuery.data ? (
+        <CareerTimeline data={timelineQuery.data} primaryRole={profile.primary_role} />
+      ) : null}
     </div>
   );
 }

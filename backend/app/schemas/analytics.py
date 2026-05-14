@@ -268,6 +268,29 @@ class VenueStatsResponse(BaseModel):
 
 
 # ====================================================================
+# Career timeline — per-year aggregation for trend charts
+# ====================================================================
+
+class TimelineEntry(BaseModel):
+    year: int
+    matches: int = Field(ge=0)
+    # Batting — null when the player didn't bat in that year/format.
+    runs: int | None = Field(default=None, ge=0)
+    batting_average: float | None = Field(default=None, ge=0)
+    batting_strike_rate: float | None = Field(default=None, ge=0)
+    # Bowling — null when the player didn't bowl in that year/format.
+    wickets: int | None = Field(default=None, ge=0)
+    bowling_economy: float | None = Field(default=None, ge=0)
+    bowling_average: float | None = Field(default=None, ge=0)
+
+
+class TimelineResponse(BaseModel):
+    profile: PlayerProfileCard
+    format: MatchType
+    years: list[TimelineEntry]
+
+
+# ====================================================================
 # Bowler phase analysis — power-play / middle / death
 # ====================================================================
 

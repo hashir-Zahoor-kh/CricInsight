@@ -32,6 +32,8 @@ from app.schemas import (
     FormGuideResponse,
     HeadToHeadResponse,
     PlayerAverageResponse,
+    TimelineEntry,
+    TimelineResponse,
     VenueStatsResponse,
 )
 from app.services.comparison import (
@@ -174,6 +176,108 @@ async def player_form(
         )
 
     return FormGuideResponse(profile=profile, innings=innings, data_quality=warnings)
+
+
+# ====================================================================
+# Career timeline — per-year aggregation
+# ====================================================================
+
+@router.get(
+    "/player/{player_id}/timeline",
+    response_model=TimelineResponse,
+    summary="Per-year batting and bowling stats for trend charts.",
+)
+async def player_timeline(
+    player_id: int,
+    format: MatchType = Query(..., description="Match format to scope the timeline to."),
+    session: AsyncSession = Depends(get_db),
+) -> TimelineResponse:
+    player = await session.get(Player, player_id)
+    if player is None:
+        raise HTTPException(status_code=404, detail=f"Player not found: id={player_id}")
+    profile = await _build_profile(session, player)
+
+    not_out_pred = or_(
+        BattingStats.dismissal_type.is_(None),
+        func.lower(BattingStats.dismissal_type).like("%not out%"),
+    )
+
+    bat_rows = (await session.execute(
+        select(
+            func.extract("year", Match.date).label("yr"),
+            func.count(func.distinct(BattingStats.match_id)).label("matches"),
+            func.coalesce(func.sum(BattingStats.runs), 0).label("runs"),
+            func.sum(case((not_out_pred, 1), else_=0)).label("not_outs"),
+            func.count(BattingStats.id).label("innings"),
+            func.coalesce(func.sum(BattingStats.balls_faced), 0).label("balls_faced"),
+        )
+        .join(Match, BattingStats.match_id == Match.id)
+        .where(BattingStats.player_id == player_id, Match.match_type == format)
+        .group_by(func.extract("year", Match.date))
+        .order_by(func.extract("year", Match.date))
+    )).all()
+
+    bowl_rows = (await session.execute(
+        select(
+            func.extract("year", Match.date).label("yr"),
+            func.count(func.distinct(BowlingStats.match_id)).label("matches"),
+            func.coalesce(func.sum(BowlingStats.wickets), 0).label("wickets"),
+            func.coalesce(func.sum(BowlingStats.runs_conceded), 0).label("runs_conceded"),
+            func.coalesce(func.sum(BowlingStats.overs), 0.0).label("overs"),
+        )
+        .join(Match, BowlingStats.match_id == Match.id)
+        .where(BowlingStats.player_id == player_id, Match.match_type == format)
+        .group_by(func.extract("year", Match.date))
+        .order_by(func.extract("year", Match.date))
+    )).all()
+
+    bat_by_year = {int(r.yr): r for r in bat_rows}
+    bowl_by_year = {int(r.yr): r for r in bowl_rows}
+    all_years = sorted(set(bat_by_year) | set(bowl_by_year))
+
+    entries: list[TimelineEntry] = []
+    for yr in all_years:
+        b = bat_by_year.get(yr)
+        bw = bowl_by_year.get(yr)
+        matches = max(int(b.matches) if b else 0, int(bw.matches) if bw else 0)
+
+        runs: int | None = None
+        batting_average: float | None = None
+        batting_strike_rate: float | None = None
+        if b and int(b.innings) > 0:
+            runs = int(b.runs)
+            not_outs = int(b.not_outs)
+            dismissals = int(b.innings) - not_outs
+            batting_average = round(runs / dismissals, 2) if dismissals > 0 else None
+            balls_faced = int(b.balls_faced)
+            batting_strike_rate = (
+                round((runs / balls_faced) * 100, 2) if balls_faced > 0 else None
+            )
+
+        wickets: int | None = None
+        bowling_economy: float | None = None
+        bowling_average: float | None = None
+        if bw:
+            wkts = int(bw.wickets)
+            overs = float(bw.overs)
+            runs_c = int(bw.runs_conceded)
+            if wkts > 0 or overs > 0:
+                wickets = wkts
+                bowling_economy = round(runs_c / overs, 2) if overs > 0 else None
+                bowling_average = round(runs_c / wkts, 2) if wkts > 0 else None
+
+        entries.append(TimelineEntry(
+            year=yr,
+            matches=matches,
+            runs=runs,
+            batting_average=batting_average,
+            batting_strike_rate=batting_strike_rate,
+            wickets=wickets,
+            bowling_economy=bowling_economy,
+            bowling_average=bowling_average,
+        ))
+
+    return TimelineResponse(profile=profile, format=format, years=entries)
 
 
 # ====================================================================

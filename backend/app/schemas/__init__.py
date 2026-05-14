@@ -19,6 +19,8 @@ from .analytics import (
     PlayerAverageResponse,
     PlayerComparisonSlot,
     PlayerProfileCard,
+    TimelineEntry,
+    TimelineResponse,
     VenueStatsResponse,
 )
 from .match import MatchBase, MatchCreate, MatchResponse
@@ -51,6 +53,8 @@ __all__ = [
     "FormGuideResponse",
     "HeadToHeadResponse",
     "VenueStatsResponse",
+    "TimelineEntry",
+    "TimelineResponse",
     "BowlerPhaseStats",
     "BowlerPhasesResponse",
     # analytics — flagship comparison endpoint
