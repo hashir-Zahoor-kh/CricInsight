@@ -14,6 +14,7 @@ import {
 } from "../components/LoadingSkeleton";
 import { PlayerProfileCard } from "../components/PlayerProfileCard";
 import { PlayerSearchPicker } from "../components/PlayerSearchPicker";
+import { ShareButton } from "../components/ShareButton";
 import { useCompare } from "../hooks/useApi";
 import {
   MatchType,
@@ -110,7 +111,7 @@ function PickersRow({
   onFormatChange: (fmt: MatchType) => void;
 }) {
   return (
-    <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-6 border border-line bg-surface p-5">
+    <div className="grid grid-cols-[1fr_1fr_auto_auto] items-end gap-6 border border-line bg-surface p-5">
       <PlayerSearchPicker
         label="Player 1"
         value={player1Id}
@@ -124,6 +125,7 @@ function PickersRow({
         excludeId={player1Id}
       />
       <FormatPills value={format} onChange={onFormatChange} />
+      <ShareButton />
     </div>
   );
 }
