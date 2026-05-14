@@ -1,15 +1,6 @@
+import rankingsData from "../data/icc_rankings.json";
 import type { PlayerProfileCard as ProfileCardType, PlayerRole } from "../api/types";
 
-/**
- * Row-1 header card for the Bento Grid. Identity-only — no inline
- * stats. Layout:
- *   ┌───────────────────────────────────────────────────────┐
- *   │ NAME (Bebas Neue 48px)                       BAT/BOWL │
- *   │ COUNTRY (DM Sans uppercase, secondary)                │
- *   │                                                       │
- *   │ #-- T20I  ← TODO Feature 4 (ICC ranking pill)         │
- *   └───────────────────────────────────────────────────────┘
- */
 const ROLE_BADGE: Record<PlayerRole, string> = {
   batsman: "BAT",
   bowler: "BOWL",
@@ -39,15 +30,41 @@ export function PlayerProfileCard({
         </div>
       )}
 
-      {/* TODO Feature 4: ICC ranking badge — neon-lime pill, bottom-left.
-          Once src/data/icc_rankings.json exists, render something like:
-            <span className="border border-accent px-2 py-0.5 font-mono
-                             text-[11px] uppercase tracking-widest text-accent">
-              #{rank} {format}
-            </span>
-          For now the slot is reserved so the card height matches the
-          eventual layout. */}
-      <div className="mt-auto pt-6" aria-hidden />
+      <RankingBadges name={profile.name} />
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------
+
+type RankingEntry = Record<string, number>;
+const players = rankingsData.players as Record<string, RankingEntry>;
+
+const FORMAT_LABEL: Record<string, string> = {
+  t20i_batting:  "T20I BAT",
+  t20i_bowling:  "T20I BOWL",
+  odi_batting:   "ODI BAT",
+  odi_bowling:   "ODI BOWL",
+  test_batting:  "TEST BAT",
+  test_bowling:  "TEST BOWL",
+};
+
+function RankingBadges({ name }: { name: string }) {
+  const entry = players[name];
+  if (!entry) return <div className="mt-auto pt-6" aria-hidden />;
+
+  const badges = Object.entries(entry) as [string, number][];
+
+  return (
+    <div className="mt-auto flex flex-wrap gap-2 pt-4">
+      {badges.map(([key, rank]) => (
+        <span
+          key={key}
+          className="border border-accent px-2 py-0.5 font-mono text-[11px] uppercase tracking-widest text-accent"
+        >
+          #{rank} {FORMAT_LABEL[key] ?? key}
+        </span>
+      ))}
     </div>
   );
 }

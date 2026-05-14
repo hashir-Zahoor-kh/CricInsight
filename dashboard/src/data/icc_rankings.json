@@ -1,0 +1,15 @@
+{
+  "_meta": {
+    "last_verified": "2026-05-13",
+    "source": "WION / myKhel secondary reports — ICC T20I & ODI rankings",
+    "note": "Only players with a confirmed rank are listed. Players absent from this file show no badge."
+  },
+  "players": {
+    "Abhishek Sharma":   { "t20i_batting": 1 },
+    "Ishan Kishan":      { "t20i_batting": 2 },
+    "Daryl Mitchell":    { "odi_batting": 1 },
+    "Varun Chakravarthy":{ "t20i_bowling": 1 },
+    "Abrar Ahmed":       { "t20i_bowling": 4 },
+    "Adil Rashid":       { "odi_bowling": 4 }
+  }
+}
