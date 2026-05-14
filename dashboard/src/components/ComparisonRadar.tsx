@@ -215,19 +215,25 @@ function buildBowlingAxes(
   p1: BowlingCareerStats | null,
   p2: BowlingCareerStats | null
 ) {
-  const WICKETS_PER_M_CAP = 4; // five-wicket hauls aside, 3-4 is elite
+  const WICKETS_PER_M_CAP = 4; // 3-4 is elite; hard cap at 4
   const ECON_WORST = 12;
   const AVG_WORST = 60;
   const SR_WORST = 80; // bowling SR — balls per wicket
-  const FIVE_FER_PER_M_CAP = 0.15;
+  const BEST_FIGURES_MAX = 10; // max possible wickets in an innings
 
   function row(label: string, p1v: number, p2v: number) {
     return { dim: label, player1: p1v, player2: p2v };
   }
+
   const wpm = (s: BowlingCareerStats | null) =>
     s == null || s.matches === 0 ? 0 : s.wickets / s.matches;
-  const fiveFerPerMatch = (s: BowlingCareerStats | null) =>
-    s == null || s.matches === 0 ? 0 : s.five_wicket_hauls / s.matches;
+
+  // Parse "5/28" → 5; returns null on missing/malformed data.
+  const bestFiguresWickets = (s: BowlingCareerStats | null): number | null => {
+    if (s?.best_figures == null) return null;
+    const w = Number.parseInt(s.best_figures.split("/")[0], 10);
+    return Number.isFinite(w) ? w : null;
+  };
 
   return [
     row(
@@ -241,19 +247,19 @@ function buildBowlingAxes(
       invertNormalise(p2?.economy ?? null, ECON_WORST)
     ),
     row(
-      "Average",
+      "Bowling avg",
       invertNormalise(p1?.average ?? null, AVG_WORST),
       invertNormalise(p2?.average ?? null, AVG_WORST)
     ),
     row(
-      "Strike rate",
+      "Bowl SR",
       invertNormalise(p1?.bowling_strike_rate ?? null, SR_WORST),
       invertNormalise(p2?.bowling_strike_rate ?? null, SR_WORST)
     ),
     row(
-      "5-fers/match",
-      normalise(fiveFerPerMatch(p1), FIVE_FER_PER_M_CAP),
-      normalise(fiveFerPerMatch(p2), FIVE_FER_PER_M_CAP)
+      "Best figures",
+      normalise(bestFiguresWickets(p1), BEST_FIGURES_MAX),
+      normalise(bestFiguresWickets(p2), BEST_FIGURES_MAX)
     ),
   ];
 }
