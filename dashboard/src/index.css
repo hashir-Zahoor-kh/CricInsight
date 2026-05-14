@@ -36,3 +36,25 @@ input,
 [role='button'] {
   cursor: url('/cursor-bat.png') 8 8, pointer;
 }
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@layer utilities {
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      #111111 25%,
+      #1a1a1a 50%,
+      #111111 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+}
