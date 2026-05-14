@@ -25,6 +25,7 @@ import type {
   FormGuideResponse,
   HealthResponse,
   HeadToHeadResponse,
+  LiveScoreResponse,
   MatchResponse,
   MatchType,
   PlayerAverageResponse,
@@ -41,11 +42,22 @@ export function useHealth(): UseQueryResult<HealthResponse> {
   return useQuery<HealthResponse>({
     queryKey: ["health"],
     queryFn: () => getJson<HealthResponse>("/health"),
-    // Don't retry the health probe — we WANT to see degraded fast.
     retry: false,
-    // Re-poll every 30s while the page is open so the dashboard's
-    // status indicator updates without a refresh.
     refetchInterval: 30_000,
+  });
+}
+
+export function useLiveScores(): UseQueryResult<LiveScoreResponse> {
+  return useQuery<LiveScoreResponse>({
+    queryKey: ["live-scores"],
+    queryFn: () => getJson<LiveScoreResponse>("/api/v1/live/scores"),
+    // Match the backend's 60s cache TTL so we're not hammering the
+    // endpoint more often than it refreshes.
+    refetchInterval: 60_000,
+    // Stale data is fine — the panel shows last-known scores with no
+    // error state while a re-fetch is in flight.
+    staleTime: 55_000,
+    retry: false,
   });
 }
 

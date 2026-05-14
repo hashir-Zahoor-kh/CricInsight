@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { LiveScoresPanel } from "../components/LiveScoresPanel";
 import { PlayerSearchPicker } from "../components/PlayerSearchPicker";
 import { MatchType } from "../api/types";
 
@@ -80,14 +81,7 @@ export function HomePage() {
       </section>
 
       {/* ====================== BELOW THE FOLD ======================= */}
-      {/* TODO: LiveScoresPanel — Feature 2 */}
-      <section className="border-t border-line bg-canvas">
-        <div className="mx-auto w-full max-w-[1440px] px-12 py-16">
-          <div className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
-            Live scores · coming soon
-          </div>
-        </div>
-      </section>
+      <LiveScoresPanel />
     </>
   );
 }

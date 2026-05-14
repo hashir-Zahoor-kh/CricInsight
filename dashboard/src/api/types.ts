@@ -322,3 +322,26 @@ export interface HealthResponse {
   status: "ok" | "degraded";
   db: "connected" | "unreachable";
 }
+
+// ====================================================================
+// live.py — live scores feed
+// ====================================================================
+
+/** Mirrors Pydantic `LiveMatch`. */
+export interface LiveMatch {
+  match_id: string;
+  name: string;
+  status: string;
+  match_type: string;
+  venue: string | null;
+  teams: string[];
+  /** team_name → "180/6 (20 ov)" */
+  scores: Record<string, string>;
+  is_live: boolean;
+}
+
+/** Mirrors Pydantic `LiveScoreResponse`. */
+export interface LiveScoreResponse {
+  live_available: boolean;
+  matches: LiveMatch[];
+}

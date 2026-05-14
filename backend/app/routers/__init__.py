@@ -1,5 +1,5 @@
 """FastAPI APIRouters."""
 
-from . import analytics, matches, players
+from . import analytics, live, matches, players
 
-__all__ = ["analytics", "matches", "players"]
+__all__ = ["analytics", "live", "matches", "players"]

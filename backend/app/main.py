@@ -27,7 +27,7 @@ from sqlalchemy import text
 
 from .config import get_settings
 from .database import dispose_engine, get_session_factory
-from .routers import analytics, matches, players
+from .routers import analytics, live, matches, players
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,7 @@ def _build_app() -> FastAPI:
     app.include_router(analytics.router, prefix=api_prefix)
     app.include_router(players.router, prefix=api_prefix)
     app.include_router(matches.router, prefix=api_prefix)
+    app.include_router(live.router, prefix=api_prefix)
 
     @app.get("/health", tags=["meta"], summary="Health check (DB-aware).")
     async def health() -> dict[str, str]:
